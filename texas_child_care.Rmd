@@ -1,0 +1,25 @@
+---
+title: "texas_child_care"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(lubridate)
+```
+
+```{r}
+daycare <- read.csv("daycare_operations.csv")
+daycare$ISSUANCE_DATE <- mdy(daycare$ISSUANCE_DATE)
+
+daycare %>% 
+  group_by(year(ISSUANCE_DATE), COUNTY) %>% 
+  filter(year(ISSUANCE_DATE) %in% c(2019, 2020, 2021), !is.na(COUNTY), COUNTY != "") %>% 
+  count(COUNTY) %>% 
+  arrange(COUNTY) %>% 
+  pivot_wider(names_from = COUNTY, values_from = n)
+```
