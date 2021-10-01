@@ -12,14 +12,242 @@ library(tidyverse)
 library(lubridate)
 ```
 
-```{r}
-daycare <- read.csv("daycare_operations.csv")
-daycare$ISSUANCE_DATE <- mdy(daycare$ISSUANCE_DATE)
+```{r daycare_data}
+# from https://data.texas.gov/Social-Services/HHSC-CCL-Daycare-and-Residential-Operations-Data/bc5r-88dy
+daycare <- read.csv('daycare_operations.csv')
 
+# from https://www.hhs.texas.gov/about-hhs/records-statistics/data-statistics/child-care-licensing-statistics
+daycare_2021_01 <- read.csv('daycare_operations_2021_01.csv')
+daycare_2021_02 <- read.csv('daycare_operations_2021_02.csv')
+daycare_2021_02 <- daycare_2021_02 %>% 
+  unique()
+daycare_2021_03 <- read.csv('daycare_operations_2021_03.csv')
+daycare_2021_04 <- read.csv('daycare_operations_2021_04.csv')
+daycare_2021_05 <- read.csv('daycare_operations_2021_05.csv')
+```
+
+```{r daycare_cleaning}
+daycare <- daycare %>% 
+  mutate(ISSUANCE_DATE = mdy(ISSUANCE_DATE))
+
+daycare_permits_2021 <- daycare_2021_01 %>% 
+  pivot_longer(cols = starts_with('Permit.Status.'), names_to = 'Week', names_prefix = 'Permit.Status.', 
+               values_to = 'Status') %>% 
+  select(1:11, Week, Status) %>% 
+  bind_rows(., daycare_2021_02 %>% 
+              pivot_longer(cols = starts_with('Permit.Status.'), names_to = 'Week', 
+                           names_prefix = 'Permit.Status.', values_to = 'Status') %>% 
+              select(1:11, Week, Status), daycare_2021_03 %>% 
+              pivot_longer(cols = starts_with('Permit.Status.'), names_to = 'Week', 
+                           names_prefix = 'Permit.Status.', values_to = 'Status') %>% 
+              select(1:11, Week, Status), daycare_2021_04 %>% 
+              pivot_longer(cols = starts_with('Permit.Status.'), names_to = 'Week', 
+                           names_prefix = 'Permit.Status.', values_to = 'Status') %>% 
+              select(1:11, Week, Status), daycare_2021_05 %>% 
+              pivot_longer(cols = starts_with('Permit.Status.'), names_to = 'Week', 
+                           names_prefix = 'Permit.Status.', values_to = 'Status') %>% 
+              select(1:11, Week, Status)) %>% 
+  mutate(Permit.Issue.Date = as.Date(parse_date_time(Permit.Issue.Date, '%m/%d/%y')), 
+         Week = as.Date(parse_date_time(Week, '%m.%d.%Y')))
+
+daycare_operations_2021 <- daycare_2021_01 %>% 
+  pivot_longer(cols = starts_with('Operating.Status.'), names_to = 'Week', names_prefix = 'Operating.Status.', 
+               values_to = 'Status') %>% 
+  select(1:11, Week, Status) %>% 
+  bind_rows(., daycare_2021_02 %>% 
+              pivot_longer(cols = starts_with('Operating.Status.'), names_to = 'Week', 
+                           names_prefix = 'Operating.Status.', values_to = 'Status') %>% 
+              select(1:11, Week, Status), daycare_2021_03 %>% 
+              pivot_longer(cols = starts_with('Operating.Status.'), names_to = 'Week', 
+                           names_prefix = 'Operating.Status.', values_to = 'Status') %>% 
+              select(1:11, Week, Status), daycare_2021_04 %>% 
+              pivot_longer(cols = starts_with('Operating.Status.'), names_to = 'Week', 
+                           names_prefix = 'Operating.Status.', values_to = 'Status') %>% 
+              select(1:11, Week, Status), daycare_2021_05 %>% 
+              pivot_longer(cols = starts_with('Operating.Status.'), names_to = 'Week', 
+                           names_prefix = 'Operating.Status.', values_to = 'Status') %>% 
+              select(1:11, Week, Status)) %>% 
+  mutate(Permit.Issue.Date = as.Date(parse_date_time(Permit.Issue.Date, '%m/%d/%y')), 
+         Week = as.Date(parse_date_time(Week, '%m.%d.%Y')))
+```
+
+```{r daycare_analysis}
+# count number of daycare licenses issued from 1983 to 2021 (through Sept. 27)
+daycare %>% 
+  count(year(ISSUANCE_DATE))
+
+# count number of daycare licenses issued to each county in 2019, 2020, 2021
 daycare %>% 
   group_by(year(ISSUANCE_DATE), COUNTY) %>% 
-  filter(year(ISSUANCE_DATE) %in% c(2019, 2020, 2021), !is.na(COUNTY), COUNTY != "") %>% 
+  filter(year(ISSUANCE_DATE) %in% c(2019, 2020, 2021), !is.na(COUNTY), COUNTY != '') %>% 
   count(COUNTY) %>% 
   arrange(COUNTY) %>% 
   pivot_wider(names_from = COUNTY, values_from = n)
+
+# count number of daycares "not caring" statewide per week from January 2021 to May 2021
+daycare_operations_2021 %>% 
+  group_by(Week) %>% 
+  count(Status) %>% 
+  mutate(pct_no = n / sum(n) * 100) %>% 
+  filter(Status == 'N') %>% 
+  filter(day(Week) == 1)
+
+# count number of daycares "not caring" per county per week
+daycare_operations_2021 %>% 
+  group_by(Week, County) %>% 
+  count(Status) %>% 
+  mutate(pct_no = n / sum(n) * 100) %>% 
+  filter(Status == 'N') %>% 
+  arrange(desc(pct_no))
+
+# count types of daycares "not caring" as of May 2021 and calculate their median capacity
+daycare_operations_2021 %>% 
+  filter(Status == 'N', Week == as.Date('2021-05-01')) %>% 
+  group_by(Operation.Type) %>% 
+  summarize(Capacity = median(Capacity, na.rm = T)) %>% 
+  bind_cols(., daycare_operations_2021 %>% 
+              filter(Status == 'N', Week == as.Date('2021-05-01')) %>% 
+              count(Operation.Type) %>% 
+              select(n))
+
+# count number of non-unique daycares "not caring"
+daycare_operations_2021 %>% 
+  filter(Status == 'N') %>% 
+  count(Operation.Number) %>% 
+  filter(n > 2) 
+
+multiple_not_caring_2021 <- daycare_operations_2021 %>% 
+  filter(Status == 'N') %>% 
+  count(Operation.Number) %>% 
+  filter(n > 2) %>% 
+  left_join(., daycare, by = c('Operation.Number' = 'OPERATION_NUMBER')) %>% 
+  left_join(., daycare_operations_2021, by = 'Operation.Number') %>% 
+  mutate(Address = paste0(Address.Line.1, ', ', City, ', TX ', Zip.Code)) %>% 
+  select(Operation.Name, Address, Week, Status, Operation.Type, Capacity, ADMINISTRATOR_DIRECTOR_NAME, PHONE_NUMBER, 
+         email_address, WEBSITE_ADDRESS, Permit.Issue.Date, PROGRAMS_PROVIDED, LICENSED_TO_SERVE_AGES) %>% 
+  filter(Status == 'N')
+
+not_caring_2021 <- daycare_operations_2021 %>% 
+  filter(Status == 'N', Operation.Name != '#NAME?') %>% 
+  left_join(., daycare, by = c('Operation.Number' = 'OPERATION_NUMBER')) %>% 
+  mutate(Address = paste0(Address.Line.1, ', ', City, ', TX ', Zip.Code)) %>% 
+  select(Operation.Name, Address, Week, Operation.Type, Capacity, ADMINISTRATOR_DIRECTOR_NAME, PHONE_NUMBER, 
+         email_address, WEBSITE_ADDRESS, Permit.Issue.Date, PROGRAMS_PROVIDED, LICENSED_TO_SERVE_AGES)
+```
+
+```{r daycare_viz}
+# visualize number of daycare licenses issued from 1983 to 2021 (through Sept. 27)
+daycare %>% 
+  count(year(ISSUANCE_DATE), month(ISSUANCE_DATE)) %>% 
+  summarize(date = mdy(paste0(as.character(`month(ISSUANCE_DATE)`), '/01/', `year(ISSUANCE_DATE)`)), n) %>% 
+  ggplot(data = ., mapping = aes(x = date, y = n)) +
+  geom_line() +
+  labs(y = 'number of daycare licenses issued') +
+  theme_classic()
+
+# visualize number of daycares closed from January 2021 to May 2021
+daycare_permits_2021 %>% 
+  group_by(Week) %>% 
+  count(Status) %>% 
+  filter(Status == 'Closed') %>% 
+  ggplot(data = ., mapping = aes(x = Week, y = n)) +
+  geom_line()
+```
+
+```{r wage_data}
+# from https://www.bls.gov/oes/tables.htm
+oes_2020 <- read.csv('oes_2020.csv')
+oes_2019 <- read.csv('oes_2019.csv')
+oes_2018 <- read.csv('oes_2018.csv')
+oes_2017 <- read.csv('oes_2017.csv')
+oes_2016 <- read.csv('oes_2016.csv')
+oes_2015 <- read.csv('oes_2015.csv')
+oes_2014 <- read.csv('oes_2014.csv')
+oes_2013 <- read.csv('oes_2013.csv')
+oes_2012 <- read.csv('oes_2012.csv')
+oes_2011 <- read.csv('oes_2011.csv')
+```
+
+```{r wage_cleaning}
+# filter for Texas and metropolitan statistical areas in Texas, as well as childcare workers
+oes_2020 <- oes_2020 %>% 
+  filter(PRIM_STATE == 'TX', OCC_CODE == '39-9011') %>% 
+  select(-PRIM_STATE, -I_GROUP) %>% 
+  mutate(year = 2020)
+
+oes_2019 <- oes_2019 %>% 
+  filter(area %in% oes_2020$AREA, occ_code == '39-9011') %>% 
+  rename(jobs_1000 = jobs_1000_orig) %>% 
+  select(-i_group) %>% 
+  mutate(year = 2019)
+
+colnames(oes_2020) <- colnames(oes_2019)
+
+oes_2018 <- oes_2018 %>% 
+  filter(area %in% oes_2020$area, occ_code == '39-9011') %>% 
+  select(-X, -i_group) %>% 
+  mutate(year = 2018)
+
+oes_2017 <- oes_2017 %>% 
+  filter(area %in% oes_2020$area, occ_code == '39-9011') %>% 
+  select(-X, -i_group) %>% 
+  mutate(year = 2017)
+
+oes_2016 <- oes_2016 %>% 
+  filter(area %in% oes_2020$area, occ.code == '39-9011') %>% 
+  select(-X) %>% 
+  mutate(year = 2016)
+
+oes_2015 <- oes_2015 %>% 
+  filter(area %in% oes_2020$area, occ.code == '39-9011') %>% 
+  select(-X) %>% 
+  mutate(year = 2015)
+
+oes_2014 <- oes_2014 %>% 
+  filter(area %in% oes_2020$area, occ.code == '39-9011') %>% 
+  mutate(year = 2014)
+
+oes_2013 <- oes_2013 %>% 
+  filter(area %in% oes_2020$area, occ_code == '39-9011') %>% 
+  mutate(year = 2013)
+
+oes_2012 <- oes_2012 %>% 
+  filter(area %in% oes_2020$area, occ_code == '39-9011') %>% 
+  mutate(year = 2012)
+
+oes_2011 <- oes_2011 %>% 
+  filter(AREA %in% oes_2020$area, OCC_CODE == '39-9011') %>% 
+  mutate(year = 2011)
+
+colnames(oes_2016) <- colnames(oes_2020)
+colnames(oes_2015) <- colnames(oes_2020)
+colnames(oes_2014) <- colnames(oes_2020)
+colnames(oes_2011) <- colnames(oes_2020)
+oes_2019$loc_quotient <- as.character(oes_2019$loc_quotient)
+
+all <- bind_rows(oes_2011, oes_2012, oes_2013, oes_2014, oes_2015,
+          oes_2016, oes_2017, oes_2018, oes_2019, oes_2020) %>% 
+  mutate(naics = as.integer(naics), h_mean = as.double(h_mean), a_mean = as.double(gsub(',', '', a_mean)), 
+         mean_prse = as.double(mean_prse), h_pct10 = as.double(h_pct10), h_pct25 = as.double(h_pct25), 
+         h_median = as.double(h_median), h_pct75 = as.double(h_pct75), a_pct10 = as.double(gsub(',', '', a_pct10)), 
+         a_pct25 = as.double(gsub(',', '', a_pct25)), a_median = as.double(gsub(',', '', a_median)), 
+         a_pct75 = as.double(gsub(',', '', a_pct75)), a_pct90 = as.double(gsub(',', '', a_pct90)))
+```
+
+```{r wage_analysis}
+all %>% 
+  filter(area != 48) %>% 
+  group_by(area_title)
+```
+
+```{r wage_viz}
+# visualize median hourly wage for childcare workers from 2011 to 2020
+all %>% 
+  filter(area == 48) %>% 
+  ggplot(data = ., mapping = aes(x = year, y = h_median)) +
+  geom_line() +
+  scale_x_discrete(limits = c(2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020)) +
+  scale_y_continuous(limits = c(7.25, 15)) +
+  labs(y = 'median hourly wage for childcare workers') +
+  theme_classic()
 ```
