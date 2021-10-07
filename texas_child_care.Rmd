@@ -24,6 +24,9 @@ daycare_2021_02 <- daycare_2021_02 %>%
 daycare_2021_03 <- read.csv('daycare_operations_2021_03.csv')
 daycare_2021_04 <- read.csv('daycare_operations_2021_04.csv')
 daycare_2021_05 <- read.csv('daycare_operations_2021_05.csv')
+
+# from https://censusreporter.org/data/table/?table=B09001&geo_ids=04000US48,050|04000US48&primary_geo_id=04000US48#
+children <- read.csv('children.csv')
 ```
 
 ```{r daycare_cleaning}
@@ -71,6 +74,15 @@ daycare_operations_2021 <- daycare_2021_01 %>%
          Week = as.Date(parse_date_time(Week, '%m.%d.%Y')))
 ```
 
+```{r daycare_checks}
+# check missingness of data from month to month
+daycare_operations_2021 %>% 
+  group_by(Week) %>% 
+  count(Status) %>% 
+  mutate(pct_n = n / sum(n) * 100) %>% 
+  filter(day(Week) == 1)
+```
+
 ```{r daycare_analysis}
 # count number of daycare licenses issued from 1983 to 2021 (through Sept. 27)
 daycare %>% 
@@ -97,8 +109,9 @@ daycare_operations_2021 %>%
   group_by(Week, County) %>% 
   count(Status) %>% 
   mutate(pct_no = n / sum(n) * 100) %>% 
-  filter(Status == 'N') %>% 
-  arrange(desc(pct_no))
+  filter(Status == 'N') %>%
+  filter(day(Week) == 1) %>% 
+  arrange(desc(Week), desc(pct_no), desc(n))
 
 # count types of daycares "not caring" as of May 2021 and calculate their median capacity
 daycare_operations_2021 %>% 
@@ -116,6 +129,34 @@ daycare_operations_2021 %>%
   count(Operation.Number) %>% 
   filter(n > 2) 
 
+# calculate ratio of children under 5 to total capacity of daycares, by county
+daycare %>% 
+  filter(TYPE_OF_ISSUANCE == 'Full Permit') %>% 
+  group_by(COUNTY) %>% 
+  summarize(TOTAL_CAPACITY = sum(TOTAL_CAPACITY, na.rm = T)) %>% 
+  merge(., children %>% 
+          filter(county != 'Texas') %>% 
+          mutate(county = toupper(county)) %>% 
+          rename(COUNTY = county)) %>% 
+  summarize(COUNTY, under_5 = under_3_years + X3_to_4_years + X5_years,
+            TOTAL_CAPACITY, ratio = under_5 / TOTAL_CAPACITY) %>% 
+  arrange(desc(ratio))
+
+# calculate ratio of children under 5 to total capacity of daycares open as of May 1, 2021, by county
+daycare_operations_2021 %>% 
+  filter(Week == as.Date('2021-05-01'), Status == 'Y', County != '') %>% 
+  group_by(County) %>% 
+  summarize(Capacity = sum(Capacity, na.rm = T)) %>% 
+  merge(., children %>% 
+          filter(county != 'Texas') %>% 
+          mutate(county = toupper(county)) %>% 
+          rename(County = county)) %>% 
+  summarize(County, under_5 = under_3_years + X3_to_4_years + X5_years, Capacity, ratio = under_5 / Capacity) %>% 
+  arrange(desc(ratio))
+```
+
+```{r daycare_output}
+# to export spreadsheets of daycares "not caring"
 multiple_not_caring_2021 <- daycare_operations_2021 %>% 
   filter(Status == 'N') %>% 
   count(Operation.Number) %>% 
@@ -145,13 +186,24 @@ daycare %>%
   labs(y = 'number of daycare licenses issued') +
   theme_classic()
 
-# visualize number of daycares closed from January 2021 to May 2021
-daycare_permits_2021 %>% 
+# visualize number of daycares "not caring" from January 2021 to May 2021
+daycare_operations_2021 %>% 
+  filter(day(Week) == 1) %>% 
   group_by(Week) %>% 
   count(Status) %>% 
-  filter(Status == 'Closed') %>% 
+  filter(Status == 'N') %>% 
   ggplot(data = ., mapping = aes(x = Week, y = n)) +
   geom_line()
+
+daycare_operations_2021 %>% 
+  filter(day(Week) == 1, County %in% c('TARRANT', 'TRAVIS', 'EL PASO', 'WEBB')) %>% 
+  group_by(Week, County) %>% 
+  count(Status) %>% 
+  filter(Status == 'N') %>% 
+  select(-Status) %>% 
+  pivot_wider(names_from = County, values_from = n) %>% 
+  ggplot(data = ., mapping = aes(x = Week, y = n)) +
+  geom_line(color = County)
 ```
 
 ```{r wage_data}
@@ -170,13 +222,22 @@ oes_2011 <- read.csv('oes_2011.csv')
 
 ```{r wage_cleaning}
 # filter for Texas and metropolitan statistical areas in Texas, as well as childcare workers
+# 25-2011: preschool teachers, except special education
+# 25-2012: kindergarten Teachers, except special education
+# 35-3011: bartenders
+# 35-3023: fast food and counter workers
+# 35-3031: waiters and waitresses
+# 39-9011: child care workers
+# 41-2031: retail salespersons
+
 oes_2020 <- oes_2020 %>% 
-  filter(PRIM_STATE == 'TX', OCC_CODE == '39-9011') %>% 
+  filter(PRIM_STATE == 'TX', 
+         OCC_CODE %in% c('25-2011', '25-2012', '35-3011', '35-3023', '35-3031', '39-9011', '41-2031')) %>% 
   select(-PRIM_STATE, -I_GROUP) %>% 
   mutate(year = 2020)
 
 oes_2019 <- oes_2019 %>% 
-  filter(area %in% oes_2020$AREA, occ_code == '39-9011') %>% 
+  filter(area %in% oes_2020$AREA, occ_code %in% oes_2020$OCC_CODE) %>% 
   rename(jobs_1000 = jobs_1000_orig) %>% 
   select(-i_group) %>% 
   mutate(year = 2019)
@@ -184,39 +245,39 @@ oes_2019 <- oes_2019 %>%
 colnames(oes_2020) <- colnames(oes_2019)
 
 oes_2018 <- oes_2018 %>% 
-  filter(area %in% oes_2020$area, occ_code == '39-9011') %>% 
+  filter(area %in% oes_2020$area, occ_code %in% oes_2020$occ_code) %>% 
   select(-X, -i_group) %>% 
   mutate(year = 2018)
 
 oes_2017 <- oes_2017 %>% 
-  filter(area %in% oes_2020$area, occ_code == '39-9011') %>% 
+  filter(area %in% oes_2020$area, occ_code %in% oes_2020$occ_code) %>% 
   select(-X, -i_group) %>% 
   mutate(year = 2017)
 
 oes_2016 <- oes_2016 %>% 
-  filter(area %in% oes_2020$area, occ.code == '39-9011') %>% 
+  filter(area %in% oes_2020$area, occ.code %in% oes_2020$occ_code) %>% 
   select(-X) %>% 
   mutate(year = 2016)
 
 oes_2015 <- oes_2015 %>% 
-  filter(area %in% oes_2020$area, occ.code == '39-9011') %>% 
+  filter(area %in% oes_2020$area, occ.code %in% oes_2020$occ_code) %>% 
   select(-X) %>% 
   mutate(year = 2015)
 
 oes_2014 <- oes_2014 %>% 
-  filter(area %in% oes_2020$area, occ.code == '39-9011') %>% 
+  filter(area %in% oes_2020$area, occ.code %in% oes_2020$occ_code) %>% 
   mutate(year = 2014)
 
 oes_2013 <- oes_2013 %>% 
-  filter(area %in% oes_2020$area, occ_code == '39-9011') %>% 
+  filter(area %in% oes_2020$area, occ_code %in% oes_2020$occ_code) %>% 
   mutate(year = 2013)
 
 oes_2012 <- oes_2012 %>% 
-  filter(area %in% oes_2020$area, occ_code == '39-9011') %>% 
+  filter(area %in% oes_2020$area, occ_code %in% oes_2020$occ_code) %>% 
   mutate(year = 2012)
 
 oes_2011 <- oes_2011 %>% 
-  filter(AREA %in% oes_2020$area, OCC_CODE == '39-9011') %>% 
+  filter(AREA %in% oes_2020$area, OCC_CODE %in% oes_2020$occ_code) %>% 
   mutate(year = 2011)
 
 colnames(oes_2016) <- colnames(oes_2020)
@@ -236,14 +297,29 @@ all <- bind_rows(oes_2011, oes_2012, oes_2013, oes_2014, oes_2015,
 
 ```{r wage_analysis}
 all %>% 
-  filter(area != 48) %>% 
-  group_by(area_title)
+  filter(occ_code == '39-9011') %>% 
+  select(year, area, h_median) %>% 
+  filter(year == 2011 | year == 2020) %>% 
+  pivot_wider(names_from = year, values_from = h_median) %>% 
+  mutate(change = `2020` - `2011`) %>% 
+  arrange(area) %>% 
+  bind_cols(., all %>% 
+              filter(occ_code == '39-9011') %>% 
+              arrange(year) %>% 
+              slice(1:32) %>%
+              select(area_title))
+
+all %>% 
+  filter(area == 48) %>% 
+  select(year, occ_title, h_median) %>% 
+  pivot_wider(names_from = occ_title, values_from = h_median) %>% 
+  select(-3, -8)
 ```
 
 ```{r wage_viz}
 # visualize median hourly wage for childcare workers from 2011 to 2020
 all %>% 
-  filter(area == 48) %>% 
+  filter(area == 48, occ_code == '39-9011') %>% 
   ggplot(data = ., mapping = aes(x = year, y = h_median)) +
   geom_line() +
   scale_x_discrete(limits = c(2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020)) +
