@@ -12,61 +12,61 @@ library(tidyverse)
 library(lubridate)
 ```
 
-```{r daycare_data}
+```{r child_care_data}
 # from https://data.texas.gov/Social-Services/HHSC-CCL-Daycare-and-Residential-Operations-Data/bc5r-88dy
-daycare <- read.csv('daycare_operations.csv')
+child_care <- read.csv('child_care_licenses.csv')
 
 # from https://www.hhs.texas.gov/about-hhs/records-statistics/data-statistics/child-care-licensing-statistics
-daycare_2021_01 <- read.csv('daycare_operations_2021_01.csv')
-daycare_2021_02 <- read.csv('daycare_operations_2021_02.csv')
-daycare_2021_02 <- daycare_2021_02 %>% 
+child_care_2021_01 <- read.csv('child_care_operations_2021_01.csv')
+child_care_2021_02 <- read.csv('child_care_operations_2021_02.csv')
+child_care_2021_02 <- child_care_2021_02 %>% 
   unique()
-daycare_2021_03 <- read.csv('daycare_operations_2021_03.csv')
-daycare_2021_04 <- read.csv('daycare_operations_2021_04.csv')
-daycare_2021_05 <- read.csv('daycare_operations_2021_05.csv')
+child_care_2021_03 <- read.csv('child_care_operations_2021_03.csv')
+child_care_2021_04 <- read.csv('child_care_operations_2021_04.csv')
+child_care_2021_05 <- read.csv('child_care_operations_2021_05.csv')
 
 # from https://censusreporter.org/data/table/?table=B09001&geo_ids=04000US48,050|04000US48&primary_geo_id=04000US48#
 children <- read.csv('children.csv')
 ```
 
-```{r daycare_cleaning}
-daycare <- daycare %>% 
+```{r child_care_cleaning}
+child_care <- child_care %>% 
   mutate(ISSUANCE_DATE = mdy(ISSUANCE_DATE))
 
-daycare_permits_2021 <- daycare_2021_01 %>% 
+child_care_permits_2021 <- child_care_2021_01 %>% 
   pivot_longer(cols = starts_with('Permit.Status.'), names_to = 'Week', names_prefix = 'Permit.Status.', 
                values_to = 'Status') %>% 
   select(1:11, Week, Status) %>% 
-  bind_rows(., daycare_2021_02 %>% 
+  bind_rows(., child_care_2021_02 %>% 
               pivot_longer(cols = starts_with('Permit.Status.'), names_to = 'Week', 
                            names_prefix = 'Permit.Status.', values_to = 'Status') %>% 
-              select(1:11, Week, Status), daycare_2021_03 %>% 
+              select(1:11, Week, Status), child_care_2021_03 %>% 
               pivot_longer(cols = starts_with('Permit.Status.'), names_to = 'Week', 
                            names_prefix = 'Permit.Status.', values_to = 'Status') %>% 
-              select(1:11, Week, Status), daycare_2021_04 %>% 
+              select(1:11, Week, Status), child_care_2021_04 %>% 
               pivot_longer(cols = starts_with('Permit.Status.'), names_to = 'Week', 
                            names_prefix = 'Permit.Status.', values_to = 'Status') %>% 
-              select(1:11, Week, Status), daycare_2021_05 %>% 
+              select(1:11, Week, Status), child_care_2021_05 %>% 
               pivot_longer(cols = starts_with('Permit.Status.'), names_to = 'Week', 
                            names_prefix = 'Permit.Status.', values_to = 'Status') %>% 
               select(1:11, Week, Status)) %>% 
   mutate(Permit.Issue.Date = as.Date(parse_date_time(Permit.Issue.Date, '%m/%d/%y')), 
          Week = as.Date(parse_date_time(Week, '%m.%d.%Y')))
 
-daycare_operations_2021 <- daycare_2021_01 %>% 
+child_care_operations_2021 <- child_care_2021_01 %>% 
   pivot_longer(cols = starts_with('Operating.Status.'), names_to = 'Week', names_prefix = 'Operating.Status.', 
                values_to = 'Status') %>% 
   select(1:11, Week, Status) %>% 
-  bind_rows(., daycare_2021_02 %>% 
+  bind_rows(., child_care_2021_02 %>% 
               pivot_longer(cols = starts_with('Operating.Status.'), names_to = 'Week', 
                            names_prefix = 'Operating.Status.', values_to = 'Status') %>% 
-              select(1:11, Week, Status), daycare_2021_03 %>% 
+              select(1:11, Week, Status), child_care_2021_03 %>% 
               pivot_longer(cols = starts_with('Operating.Status.'), names_to = 'Week', 
                            names_prefix = 'Operating.Status.', values_to = 'Status') %>% 
-              select(1:11, Week, Status), daycare_2021_04 %>% 
+              select(1:11, Week, Status), child_care_2021_04 %>% 
               pivot_longer(cols = starts_with('Operating.Status.'), names_to = 'Week', 
                            names_prefix = 'Operating.Status.', values_to = 'Status') %>% 
-              select(1:11, Week, Status), daycare_2021_05 %>% 
+              select(1:11, Week, Status), child_care_2021_05 %>% 
               pivot_longer(cols = starts_with('Operating.Status.'), names_to = 'Week', 
                            names_prefix = 'Operating.Status.', values_to = 'Status') %>% 
               select(1:11, Week, Status)) %>% 
@@ -74,38 +74,40 @@ daycare_operations_2021 <- daycare_2021_01 %>%
          Week = as.Date(parse_date_time(Week, '%m.%d.%Y')))
 ```
 
-```{r daycare_checks}
+```{r child_care_checks}
 # check missingness of data from month to month
-daycare_operations_2021 %>% 
+child_care_operations_2021 %>% 
   group_by(Week) %>% 
   count(Status) %>% 
   mutate(pct_n = n / sum(n) * 100) %>% 
   filter(day(Week) == 1)
 ```
 
-```{r daycare_analysis}
-# count number of daycare licenses issued from 1983 to 2021 (through Sept. 27)
-daycare %>% 
+```{r child_care_licenses_analysis}
+# count number of child care licenses issued from 1983 to 2021 (through Sept. 27)
+child_care %>% 
   count(year(ISSUANCE_DATE))
 
-# count number of daycare licenses issued to each county in 2019, 2020, 2021
-daycare %>% 
+# count number of child care licenses issued to each county in 2019, 2020, 2021
+child_care %>% 
   group_by(year(ISSUANCE_DATE), COUNTY) %>% 
   filter(year(ISSUANCE_DATE) %in% c(2019, 2020, 2021), !is.na(COUNTY), COUNTY != '') %>% 
   count(COUNTY) %>% 
   arrange(COUNTY) %>% 
   pivot_wider(names_from = COUNTY, values_from = n)
+```
 
-# count number of daycares "not caring" statewide per week from January 2021 to May 2021
-daycare_operations_2021 %>% 
+```{r child_care_operations_analysis}
+# count number of centers "not caring" statewide per week from January 2021 to May 2021
+child_care_operations_2021 %>% 
   group_by(Week) %>% 
   count(Status) %>% 
   mutate(pct_no = n / sum(n) * 100) %>% 
   filter(Status == 'N') %>% 
   filter(day(Week) == 1)
 
-# count number of daycares "not caring" per county per week
-daycare_operations_2021 %>% 
+# count number of centers "not caring" per county per week
+child_care_operations_2021 %>% 
   group_by(Week, County) %>% 
   count(Status) %>% 
   mutate(pct_no = n / sum(n) * 100) %>% 
@@ -113,24 +115,24 @@ daycare_operations_2021 %>%
   filter(day(Week) == 1) %>% 
   arrange(desc(Week), desc(pct_no), desc(n))
 
-# count types of daycares "not caring" as of May 2021 and calculate their median capacity
-daycare_operations_2021 %>% 
+# count types of centers "not caring" as of May 2021 and calculate their median capacity
+child_care_operations_2021 %>% 
   filter(Status == 'N', Week == as.Date('2021-05-01')) %>% 
   group_by(Operation.Type) %>% 
   summarize(Capacity = median(Capacity, na.rm = T)) %>% 
-  bind_cols(., daycare_operations_2021 %>% 
+  bind_cols(., child_care_operations_2021 %>% 
               filter(Status == 'N', Week == as.Date('2021-05-01')) %>% 
               count(Operation.Type) %>% 
               select(n))
 
-# count number of non-unique daycares "not caring"
-daycare_operations_2021 %>% 
+# count number of non-unique centers "not caring"
+child_care_operations_2021 %>% 
   filter(Status == 'N') %>% 
   count(Operation.Number) %>% 
   filter(n > 2) 
 
-# calculate ratio of children under 5 to total capacity of daycares, by county
-daycare %>% 
+# calculate ratio of children under 5 to total capacity of centers, by county
+child_care %>% 
   filter(TYPE_OF_ISSUANCE == 'Full Permit') %>% 
   group_by(COUNTY) %>% 
   summarize(TOTAL_CAPACITY = sum(TOTAL_CAPACITY, na.rm = T)) %>% 
@@ -142,8 +144,8 @@ daycare %>%
             TOTAL_CAPACITY, ratio = under_5 / TOTAL_CAPACITY) %>% 
   arrange(desc(ratio))
 
-# calculate ratio of children under 5 to total capacity of daycares open as of May 1, 2021, by county
-daycare_operations_2021 %>% 
+# calculate ratio of children under 5 to total capacity of centers open as of May 1, 2021, by county
+child_care_operations_2021 %>% 
   filter(Week == as.Date('2021-05-01'), Status == 'Y', County != '') %>% 
   group_by(County) %>% 
   summarize(Capacity = sum(Capacity, na.rm = T)) %>% 
@@ -155,39 +157,39 @@ daycare_operations_2021 %>%
   arrange(desc(ratio))
 ```
 
-```{r daycare_output}
-# to export spreadsheets of daycares "not caring"
-multiple_not_caring_2021 <- daycare_operations_2021 %>% 
+```{r child_care_output}
+# to export spreadsheets of centers "not caring"
+multiple_not_caring_2021 <- child_care_operations_2021 %>% 
   filter(Status == 'N') %>% 
   count(Operation.Number) %>% 
   filter(n > 2) %>% 
-  left_join(., daycare, by = c('Operation.Number' = 'OPERATION_NUMBER')) %>% 
-  left_join(., daycare_operations_2021, by = 'Operation.Number') %>% 
+  left_join(., child_care, by = c('Operation.Number' = 'OPERATION_NUMBER')) %>% 
+  left_join(., child_care_operations_2021, by = 'Operation.Number') %>% 
   mutate(Address = paste0(Address.Line.1, ', ', City, ', TX ', Zip.Code)) %>% 
   select(Operation.Name, Address, Week, Status, Operation.Type, Capacity, ADMINISTRATOR_DIRECTOR_NAME, PHONE_NUMBER, 
          email_address, WEBSITE_ADDRESS, Permit.Issue.Date, PROGRAMS_PROVIDED, LICENSED_TO_SERVE_AGES) %>% 
   filter(Status == 'N')
 
-not_caring_2021 <- daycare_operations_2021 %>% 
+not_caring_2021 <- child_care_operations_2021 %>% 
   filter(Status == 'N', Operation.Name != '#NAME?') %>% 
-  left_join(., daycare, by = c('Operation.Number' = 'OPERATION_NUMBER')) %>% 
+  left_join(., child_care, by = c('Operation.Number' = 'OPERATION_NUMBER')) %>% 
   mutate(Address = paste0(Address.Line.1, ', ', City, ', TX ', Zip.Code)) %>% 
   select(Operation.Name, Address, Week, Operation.Type, Capacity, ADMINISTRATOR_DIRECTOR_NAME, PHONE_NUMBER, 
          email_address, WEBSITE_ADDRESS, Permit.Issue.Date, PROGRAMS_PROVIDED, LICENSED_TO_SERVE_AGES)
 ```
 
-```{r daycare_viz}
-# visualize number of daycare licenses issued from 1983 to 2021 (through Sept. 27)
-daycare %>% 
+```{r child_care_viz}
+# visualize number of child care licenses issued from 1983 to 2021 (through Sept. 27)
+child_care %>% 
   count(year(ISSUANCE_DATE), month(ISSUANCE_DATE)) %>% 
   summarize(date = mdy(paste0(as.character(`month(ISSUANCE_DATE)`), '/01/', `year(ISSUANCE_DATE)`)), n) %>% 
   ggplot(data = ., mapping = aes(x = date, y = n)) +
   geom_line() +
-  labs(y = 'number of daycare licenses issued') +
+  labs(y = 'number of child care licenses issued') +
   theme_classic()
 
-# visualize number of daycares "not caring" from January 2021 to May 2021
-daycare_operations_2021 %>% 
+# visualize number of centers "not caring" from January 2021 to May 2021
+child_care_operations_2021 %>% 
   filter(day(Week) == 1) %>% 
   group_by(Week) %>% 
   count(Status) %>% 
@@ -195,7 +197,7 @@ daycare_operations_2021 %>%
   ggplot(data = ., mapping = aes(x = Week, y = n)) +
   geom_line()
 
-daycare_operations_2021 %>% 
+child_care_operations_2021 %>% 
   filter(day(Week) == 1, County %in% c('TARRANT', 'TRAVIS', 'EL PASO', 'WEBB')) %>% 
   group_by(Week, County) %>% 
   count(Status) %>% 
