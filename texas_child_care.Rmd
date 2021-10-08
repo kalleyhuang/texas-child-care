@@ -25,8 +25,10 @@ child_care_2021_03 <- read.csv('child_care_operations_2021_03.csv')
 child_care_2021_04 <- read.csv('child_care_operations_2021_04.csv')
 child_care_2021_05 <- read.csv('child_care_operations_2021_05.csv')
 
-# from https://censusreporter.org/data/table/?table=B09001&geo_ids=04000US48,050|04000US48&primary_geo_id=04000US48#
-children <- read.csv('children.csv')
+# county level from https://censusreporter.org/data/table/?table=B09001&geo_ids=04000US48,050|04000US48&primary_geo_id=04000US48#
+# zip code level from https://censusreporter.org/data/table/?table=B09001&geo_ids=04000US48,050|04000US48,860|04000US48&primary_geo_id=04000US48#
+children_by_county <- read.csv('children_county.csv')
+children_by_zip <- read.csv('children_zip.csv')
 ```
 
 ```{r child_care_cleaning}
@@ -81,12 +83,30 @@ child_care_operations_2021 %>%
   count(Status) %>% 
   mutate(pct_n = n / sum(n) * 100) %>% 
   filter(day(Week) == 1)
+
+# find centers in operations status data, but not licensing data
+child_care_operations_2021 %>% 
+  filter(Week == as.Date('2021-05-01')) %>% 
+  mutate(Operation.Number = gsub('-|- | ', '', Operation.Number)) %>% 
+  anti_join(., child_care %>% 
+              mutate(OPERATION_NUMBER = gsub('-|- | ', '', OPERATION_NUMBER)),
+            by = c('Operation.Number' = 'OPERATION_NUMBER')) %>% 
+  filter(Status == 'N')
+
+# find centers in licensing data, but not operations status data
+child_care %>% 
+  mutate(OPERATION_NUMBER = gsub('-|- | ', '', OPERATION_NUMBER)) %>% 
+  anti_join(., child_care_operations_2021 %>% 
+              filter(Week == as.Date('2021-05-01')) %>% 
+              mutate(Operation.Number = gsub('-|- | ', '', Operation.Number)),
+            by = c('OPERATION_NUMBER' = 'Operation.Number'))
 ```
 
 ```{r child_care_licenses_analysis}
 # count number of child care licenses issued from 1983 to 2021 (through Sept. 27)
 child_care %>% 
-  count(year(ISSUANCE_DATE))
+  count(year(ISSUANCE_DATE), month(ISSUANCE_DATE)) %>% 
+  arrange(n)
 
 # count number of child care licenses issued to each county in 2019, 2020, 2021
 child_care %>% 
@@ -95,6 +115,10 @@ child_care %>%
   count(COUNTY) %>% 
   arrange(COUNTY) %>% 
   pivot_wider(names_from = COUNTY, values_from = n)
+
+child_care %>% 
+  count(COUNTY) %>% 
+  arrange(desc(n))
 ```
 
 ```{r child_care_operations_analysis}
@@ -123,20 +147,29 @@ child_care_operations_2021 %>%
   bind_cols(., child_care_operations_2021 %>% 
               filter(Status == 'N', Week == as.Date('2021-05-01')) %>% 
               count(Operation.Type) %>% 
-              select(n))
+              select(n)) %>% 
+  ungroup() %>% 
+  mutate(pct = n / sum(n) * 100)
 
 # count number of non-unique centers "not caring"
 child_care_operations_2021 %>% 
   filter(Status == 'N') %>% 
   count(Operation.Number) %>% 
-  filter(n > 2) 
+  filter(n > 2) %>% 
+  left_join(., child_care_operations_2021 %>% 
+              filter(Status == 'N'))
 
 # calculate ratio of children under 5 to total capacity of centers, by county
 child_care %>% 
-  filter(TYPE_OF_ISSUANCE == 'Full Permit') %>% 
+  summarize(TOTAL_CAPACITY = sum(TOTAL_CAPACITY, na.rm = T)) %>% 
+  merge(., children_by_county %>% 
+          filter(county == 'Texas')) %>% 
+  summarize(under_5 = under_3_years + X3_to_4_years + X5_years, TOTAL_CAPACITY, ratio = under_5 / TOTAL_CAPACITY)
+
+child_care %>% 
   group_by(COUNTY) %>% 
   summarize(TOTAL_CAPACITY = sum(TOTAL_CAPACITY, na.rm = T)) %>% 
-  merge(., children %>% 
+  merge(., children_by_county %>% 
           filter(county != 'Texas') %>% 
           mutate(county = toupper(county)) %>% 
           rename(COUNTY = county)) %>% 
@@ -149,7 +182,7 @@ child_care_operations_2021 %>%
   filter(Week == as.Date('2021-05-01'), Status == 'Y', County != '') %>% 
   group_by(County) %>% 
   summarize(Capacity = sum(Capacity, na.rm = T)) %>% 
-  merge(., children %>% 
+  merge(., children_by_county %>% 
           filter(county != 'Texas') %>% 
           mutate(county = toupper(county)) %>% 
           rename(County = county)) %>% 
@@ -185,7 +218,6 @@ child_care %>%
   summarize(date = mdy(paste0(as.character(`month(ISSUANCE_DATE)`), '/01/', `year(ISSUANCE_DATE)`)), n) %>% 
   ggplot(data = ., mapping = aes(x = date, y = n)) +
   geom_line() +
-  labs(y = 'number of child care licenses issued') +
   theme_classic()
 
 # visualize number of centers "not caring" from January 2021 to May 2021
@@ -196,16 +228,6 @@ child_care_operations_2021 %>%
   filter(Status == 'N') %>% 
   ggplot(data = ., mapping = aes(x = Week, y = n)) +
   geom_line()
-
-child_care_operations_2021 %>% 
-  filter(day(Week) == 1, County %in% c('TARRANT', 'TRAVIS', 'EL PASO', 'WEBB')) %>% 
-  group_by(Week, County) %>% 
-  count(Status) %>% 
-  filter(Status == 'N') %>% 
-  select(-Status) %>% 
-  pivot_wider(names_from = County, values_from = n) %>% 
-  ggplot(data = ., mapping = aes(x = Week, y = n)) +
-  geom_line(color = County)
 ```
 
 ```{r wage_data}
@@ -309,7 +331,8 @@ all %>%
               filter(occ_code == '39-9011') %>% 
               arrange(year) %>% 
               slice(1:32) %>%
-              select(area_title))
+              select(area_title)) %>% 
+  arrange(desc(change))
 
 all %>% 
   filter(area == 48) %>% 
@@ -326,6 +349,6 @@ all %>%
   geom_line() +
   scale_x_discrete(limits = c(2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020)) +
   scale_y_continuous(limits = c(7.25, 15)) +
-  labs(y = 'median hourly wage for childcare workers') +
+  labs(y = 'median hourly wage for child care workers') +
   theme_classic()
 ```
