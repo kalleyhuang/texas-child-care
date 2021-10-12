@@ -103,12 +103,12 @@ child_care %>%
 ```
 
 ```{r child_care_licenses_analysis}
-# count number of child care licenses issued from 1983 to 2021 (through Sept. 27)
+# count number of licenses issued from 1983 to 2021 (through Sept. 27)
 child_care %>% 
   count(year(ISSUANCE_DATE), month(ISSUANCE_DATE)) %>% 
   arrange(n)
 
-# count number of child care licenses issued to each county in 2019, 2020, 2021
+# count number of licenses issued in each county in 2019, 2020, 2021
 child_care %>% 
   group_by(year(ISSUANCE_DATE), COUNTY) %>% 
   filter(year(ISSUANCE_DATE) %in% c(2019, 2020, 2021), !is.na(COUNTY), COUNTY != '') %>% 
@@ -116,8 +116,23 @@ child_care %>%
   arrange(COUNTY) %>% 
   pivot_wider(names_from = COUNTY, values_from = n)
 
+# count number of licenses issued in each county
 child_care %>% 
   count(COUNTY) %>% 
+  arrange(desc(n))
+
+# county number of potential closures in each county
+child_care_operations_2021 %>%
+  filter(Week == as.Date('2021-05-01')) %>% 
+  mutate(Operation.Number = gsub('-|- | ', '', Operation.Number)) %>% 
+  anti_join(., child_care %>% 
+              mutate(OPERATION_NUMBER = gsub('-|- | ', '', OPERATION_NUMBER)),
+            by = c('Operation.Number' = 'OPERATION_NUMBER')) %>% 
+  group_by(County) %>% 
+  count(Status) %>% 
+  filter(County != '') %>% 
+  mutate(pct_closed = n / sum(n) * 100) %>% 
+  filter(Status == 'N') %>% 
   arrange(desc(n))
 ```
 
@@ -209,6 +224,18 @@ not_caring_2021 <- child_care_operations_2021 %>%
   mutate(Address = paste0(Address.Line.1, ', ', City, ', TX ', Zip.Code)) %>% 
   select(Operation.Name, Address, Week, Operation.Type, Capacity, ADMINISTRATOR_DIRECTOR_NAME, PHONE_NUMBER, 
          email_address, WEBSITE_ADDRESS, Permit.Issue.Date, PROGRAMS_PROVIDED, LICENSED_TO_SERVE_AGES)
+
+# to export spreadsheet of potentially closed center
+potentially_closed <- child_care_operations_2021 %>% 
+  filter(Week == as.Date('2021-05-01')) %>% 
+  mutate(Operation.Number = gsub('-|- | ', '', Operation.Number)) %>% 
+  anti_join(., child_care %>% 
+              mutate(OPERATION_NUMBER = gsub('-|- | ', '', OPERATION_NUMBER)),
+            by = c('Operation.Number' = 'OPERATION_NUMBER')) %>% 
+  filter(Status == 'N') %>% 
+  left_join(., child_care, by = c('Operation.Number' = 'OPERATION_NUMBER')) %>% 
+  mutate(Address = paste0(Address.Line.1, ', ', City, ', TX ', Zip.Code)) %>% 
+  select(Operation.Name, Address, Operation.Type, Capacity, Permit.Issue.Date)
 ```
 
 ```{r child_care_viz}
@@ -320,6 +347,7 @@ all <- bind_rows(oes_2011, oes_2012, oes_2013, oes_2014, oes_2015,
 ```
 
 ```{r wage_analysis}
+# calculate change in median hourly wage for child care workers in each MSA from 2011 to 2020
 all %>% 
   filter(occ_code == '39-9011') %>% 
   select(year, area, h_median) %>% 
@@ -334,11 +362,58 @@ all %>%
               select(area_title)) %>% 
   arrange(desc(change))
 
+# compare median hourly wage for each job in each MSA in 2020
+all %>% 
+  filter(area != 48) %>% 
+  select(year, area, occ_title, a_median) %>% 
+  mutate(hourly_median = a_median / (40 * 52)) %>% 
+  select(-a_median) %>% 
+  filter(year == 2020) %>% 
+  left_join(., all %>% 
+              filter(area != 48) %>% 
+              arrange(year) %>% 
+              slice(1:179) %>% 
+              select(area, area_title) %>% 
+              unique()) %>% 
+  select(area_title, occ_title, hourly_median) %>% 
+  group_by(area_title) %>% 
+  arrange(desc(hourly_median), .by_group = T) %>% 
+  filter(occ_title %in% c('Retail Salespersons', 'Childcare Workers', 
+                          'Preschool Teachers, Except Special Education',
+                          'Kindergarten Teachers, Except Special Education'))
+
+all %>% 
+  filter(area == 47020, year == 2020) %>% 
+  select(occ_title, h_median)
+
+# calculate change in median hourly wage for each job in each MSA from 2011 to 2020
+all %>% 
+  filter(area != 48) %>% 
+  select(year, area, occ_title, a_median) %>% 
+  mutate(hourly_median = a_median / (40 * 52)) %>% 
+  select(-a_median) %>% 
+  filter(year == 2011 | year == 2020) %>% 
+  pivot_wider(names_from = year, values_from = hourly_median) %>% 
+  mutate(change = `2020` - `2011`) %>% 
+  left_join(., all %>% 
+              filter(area != 48) %>% 
+              arrange(year) %>% 
+              slice(1:179) %>% 
+              select(area, area_title) %>% 
+              unique()) %>% 
+  select(area_title, occ_title, change) %>% 
+  group_by(area_title) %>% 
+  arrange(desc(change), .by_group = T) %>% 
+  filter(occ_title %in% c('Retail Salespersons', 'Childcare Workers'))
+
+# calculate change in median hourly wage for each job statewide from 2011 to 2020
 all %>% 
   filter(area == 48) %>% 
-  select(year, occ_title, h_median) %>% 
-  pivot_wider(names_from = occ_title, values_from = h_median) %>% 
-  select(-3, -8)
+  select(year, occ_title, a_median) %>% 
+  mutate(hourly_median = a_median / (40 * 52)) %>% 
+  select(-a_median) %>% 
+  pivot_wider(names_from = occ_title, values_from = hourly_median) %>% 
+  select(-8)
 ```
 
 ```{r wage_viz}
