@@ -14,6 +14,7 @@ library(lubridate)
 
 ```{r child_care_data}
 # from https://data.texas.gov/Social-Services/HHSC-CCL-Daycare-and-Residential-Operations-Data/bc5r-88dy
+# last pulled Nov. 23
 child_care <- read.csv('child_care_licenses.csv')
 
 # from https://www.hhs.texas.gov/about-hhs/records-statistics/data-statistics/child-care-licensing-statistics
@@ -142,7 +143,7 @@ child_care %>%
 ```
 
 ```{r child_care_licenses_analysis}
-# count number of licenses issued from 1983 to 2021 (through Sept. 27)
+# count number of licenses issued since 1983
 child_care %>% 
   filter(TYPE_OF_ISSUANCE == 'Full Permit' | TYPE_OF_ISSUANCE == 'Initial') %>% 
   count(year(ISSUANCE_DATE), month(ISSUANCE_DATE)) %>% 
@@ -177,7 +178,7 @@ child_care_operations_2021 %>%
 ```
 
 ```{r child_care_operations_analysis}
-# count number of centers "not caring" statewide per month from January 2021 to August 2021
+# count number of centers "not caring" statewide per month
 child_care_operations_2021 %>% 
   group_by(Week) %>% 
   count(Status) %>% 
@@ -250,12 +251,6 @@ child_care_operations_2021 %>%
           rename(County = county)) %>% 
   summarize(County, under_5 = under_3_years + X3_to_4_years + X5_years, Capacity, ratio = under_5 / Capacity) %>% 
   arrange(desc(ratio))
-
-child_care_operations_2021 %>% 
-  group_by(month(Week)) %>% 
-  filter(Status == 'N') %>% 
-  distinct(Operation.Number, .keep_all = T) %>% 
-  count(Status)
 ```
 
 ```{r child_care_output}
@@ -292,7 +287,7 @@ potentially_closed <- child_care_operations_2021 %>%
 ```
 
 ```{r child_care_viz}
-# visualize number of child care licenses issued from 1983 to 2021 (through Sept. 27)
+# visualize number of child care licenses issued since 1983
 child_care %>% 
   count(year(ISSUANCE_DATE), month(ISSUANCE_DATE)) %>% 
   summarize(date = mdy(paste0(as.character(`month(ISSUANCE_DATE)`), '/01/', `year(ISSUANCE_DATE)`)), n) %>% 
