@@ -131,10 +131,12 @@ child_care %>%
               mutate(Operation.Number = gsub('-|- | ', '', Operation.Number)),
             by = c('OPERATION_NUMBER' = 'Operation.Number'))
 
+# count number of operations by type in most recent data for operations status
 child_care_operations_2021 %>% 
   filter(Week == as.Date('2021-09-01')) %>% 
   count(Operation.Type)
 
+# count number of operations by type in licensing data
 child_care %>% 
   count(OPERATION_TYPE)
 ```
@@ -142,6 +144,7 @@ child_care %>%
 ```{r child_care_licenses_analysis}
 # count number of licenses issued from 1983 to 2021 (through Sept. 27)
 child_care %>% 
+  filter(TYPE_OF_ISSUANCE == 'Full Permit' | TYPE_OF_ISSUANCE == 'Initial') %>% 
   count(year(ISSUANCE_DATE), month(ISSUANCE_DATE)) %>% 
   arrange(n)
 
