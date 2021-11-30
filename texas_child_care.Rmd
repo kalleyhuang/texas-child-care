@@ -119,10 +119,7 @@ child_care_operations_2021 %>%
   mutate(Operation.Number = gsub('-|- | ', '', Operation.Number)) %>% 
   anti_join(., child_care %>% 
               mutate(OPERATION_NUMBER = gsub('-|- | ', '', OPERATION_NUMBER)),
-            by = c('Operation.Number' = 'OPERATION_NUMBER')) %>% 
-  filter(Status == 'N', County %in% deserts, Capacity > 0) %>% 
-  arrange(desc(Capacity)) %>% 
-  select(Operation.Name, Address.Line.1, City, County, Operation.Type, Capacity)
+            by = c('Operation.Number' = 'OPERATION_NUMBER'))
 
 # find centers in licensing data, but not operations status data
 child_care %>% 
@@ -143,10 +140,11 @@ child_care %>%
 ```
 
 ```{r child_care_licenses_analysis}
-# count number of licenses issued since 1983
+# count number of licenses issued by month since 1983
 child_care %>% 
   filter(TYPE_OF_ISSUANCE == 'Full Permit' | TYPE_OF_ISSUANCE == 'Initial') %>% 
   count(year(ISSUANCE_DATE), month(ISSUANCE_DATE)) %>% 
+#  arrange(`year(ISSUANCE_DATE)`, `month(ISSUANCE_DATE)`)
   arrange(n)
 
 # count number of licenses issued in each county in 2019, 2020, 2021
@@ -162,7 +160,7 @@ child_care %>%
   count(COUNTY) %>% 
   arrange(desc(n))
 
-# count number of potential closures in each county
+# count number of centers "not caring" and not in licensing data in each county
 child_care_operations_2021 %>%
   filter(Week == as.Date('2021-09-01')) %>% 
   mutate(Operation.Number = gsub('-|- | ', '', Operation.Number)) %>% 
@@ -171,10 +169,37 @@ child_care_operations_2021 %>%
             by = c('Operation.Number' = 'OPERATION_NUMBER')) %>% 
   group_by(County) %>% 
   count(Status) %>% 
-  filter(County != '') %>% 
   mutate(pct_closed = n / sum(n) * 100) %>% 
   filter(Status == 'N') %>% 
   arrange(desc(n))
+
+# find which counties have no licensed centers
+child_care %>% 
+  count(COUNTY) %>% 
+  arrange(COUNTY)
+setdiff(toupper(children_by_county$county), child_care$COUNTY)
+# double check for data entry: Deaf Smith entered as DEAFSMITH
+
+# calculate ratio of children under 5 to total capacity of centers in Texas
+child_care %>% 
+  summarize(TOTAL_CAPACITY = sum(TOTAL_CAPACITY, na.rm = T)) %>% 
+  merge(., children_by_county %>% 
+          filter(county == 'Texas')) %>% 
+  summarize(under_5 = under_3_years + X3_to_4_years + X5_years, 
+            TOTAL_CAPACITY, ratio = under_5 / TOTAL_CAPACITY)
+
+# calculate ratio of children under 5 to total capacity of centers, by county
+child_care %>% 
+  group_by(COUNTY) %>% 
+  summarize(TOTAL_CAPACITY = sum(TOTAL_CAPACITY, na.rm = T)) %>% 
+  merge(., children_by_county %>% 
+          filter(county != 'Texas') %>% 
+          mutate(county = toupper(county)) %>% 
+          rename(COUNTY = county)) %>% 
+  summarize(COUNTY, under_5 = under_3_years + X3_to_4_years + X5_years,
+            TOTAL_CAPACITY, ratio = under_5 / TOTAL_CAPACITY) %>% 
+  arrange(desc(ratio)) %>% 
+  filter(ratio >= 3)
 ```
 
 ```{r child_care_operations_analysis}
@@ -222,25 +247,7 @@ child_care_operations_2021 %>%
   left_join(., child_care_operations_2021 %>% 
               filter(Status == 'N'))
 
-# calculate ratio of children under 5 to total capacity of centers, by county
-child_care %>% 
-  summarize(TOTAL_CAPACITY = sum(TOTAL_CAPACITY, na.rm = T)) %>% 
-  merge(., children_by_county %>% 
-          filter(county == 'Texas')) %>% 
-  summarize(under_5 = under_3_years + X3_to_4_years + X5_years, TOTAL_CAPACITY, ratio = under_5 / TOTAL_CAPACITY)
-
-child_care %>% 
-  group_by(COUNTY) %>% 
-  summarize(TOTAL_CAPACITY = sum(TOTAL_CAPACITY, na.rm = T)) %>% 
-  merge(., children_by_county %>% 
-          filter(county != 'Texas') %>% 
-          mutate(county = toupper(county)) %>% 
-          rename(COUNTY = county)) %>% 
-  summarize(COUNTY, under_5 = under_3_years + X3_to_4_years + X5_years,
-            TOTAL_CAPACITY, ratio = under_5 / TOTAL_CAPACITY) %>% 
-  arrange(desc(ratio))
-
-# calculate ratio of children under 5 to total capacity of centers open as of September 1, 2021, by county
+# calculate ratio of children under 5 to total capacity of centers caring as of Sept. 1, by county
 child_care_operations_2021 %>% 
   filter(Week == as.Date('2021-09-01'), Status == 'Y', County != '') %>% 
   group_by(County) %>% 
@@ -249,7 +256,8 @@ child_care_operations_2021 %>%
           filter(county != 'Texas') %>% 
           mutate(county = toupper(county)) %>% 
           rename(County = county)) %>% 
-  summarize(County, under_5 = under_3_years + X3_to_4_years + X5_years, Capacity, ratio = under_5 / Capacity) %>% 
+  summarize(County, under_5 = under_3_years + X3_to_4_years + X5_years, 
+            Capacity, ratio = under_5 / Capacity) %>% 
   arrange(desc(ratio))
 ```
 
@@ -262,18 +270,20 @@ multiple_not_caring_2021 <- child_care_operations_2021 %>%
   left_join(., child_care, by = c('Operation.Number' = 'OPERATION_NUMBER')) %>% 
   left_join(., child_care_operations_2021, by = 'Operation.Number') %>% 
   mutate(Address = paste0(Address.Line.1, ', ', City, ', TX ', Zip.Code)) %>% 
-  select(Operation.Name, Address, Week, Status, Operation.Type, Capacity, ADMINISTRATOR_DIRECTOR_NAME, PHONE_NUMBER, 
-         email_address, WEBSITE_ADDRESS, Permit.Issue.Date, PROGRAMS_PROVIDED, LICENSED_TO_SERVE_AGES) %>% 
+  select(Operation.Name, Address, Week, Status, Operation.Type, Capacity, 
+         ADMINISTRATOR_DIRECTOR_NAME, PHONE_NUMBER, email_address, WEBSITE_ADDRESS, 
+         Permit.Issue.Date, PROGRAMS_PROVIDED, LICENSED_TO_SERVE_AGES) %>% 
   filter(Status == 'N')
 
 not_caring_2021 <- child_care_operations_2021 %>% 
   filter(Status == 'N', Operation.Name != '#NAME?') %>% 
   left_join(., child_care, by = c('Operation.Number' = 'OPERATION_NUMBER')) %>% 
   mutate(Address = paste0(Address.Line.1, ', ', City, ', TX ', Zip.Code)) %>% 
-  select(Operation.Name, Address, Week, Operation.Type, Capacity, ADMINISTRATOR_DIRECTOR_NAME, PHONE_NUMBER, 
-         email_address, WEBSITE_ADDRESS, Permit.Issue.Date, PROGRAMS_PROVIDED, LICENSED_TO_SERVE_AGES)
+  select(Operation.Name, Address, Week, Operation.Type, Capacity, 
+         ADMINISTRATOR_DIRECTOR_NAME, PHONE_NUMBER, email_address, WEBSITE_ADDRESS, 
+         Permit.Issue.Date, PROGRAMS_PROVIDED, LICENSED_TO_SERVE_AGES)
 
-# to export spreadsheet of potentially closed center
+# to export spreadsheet of centers "not caring" and not in licensing data
 potentially_closed <- child_care_operations_2021 %>% 
   filter(Week == as.Date('2021-09-01')) %>% 
   mutate(Operation.Number = gsub('-|- | ', '', Operation.Number)) %>% 
@@ -291,6 +301,7 @@ potentially_closed <- child_care_operations_2021 %>%
 child_care %>% 
   count(year(ISSUANCE_DATE), month(ISSUANCE_DATE)) %>% 
   summarize(date = mdy(paste0(as.character(`month(ISSUANCE_DATE)`), '/01/', `year(ISSUANCE_DATE)`)), n) %>% 
+  filter(year(date) >= 2019) %>% 
   ggplot(data = ., mapping = aes(x = date, y = n)) +
   geom_line() +
   theme_classic()
@@ -387,11 +398,13 @@ oes_2019$loc_quotient <- as.character(oes_2019$loc_quotient)
 
 all <- bind_rows(oes_2011, oes_2012, oes_2013, oes_2014, oes_2015,
           oes_2016, oes_2017, oes_2018, oes_2019, oes_2020) %>% 
-  mutate(naics = as.integer(naics), h_mean = as.double(h_mean), a_mean = as.double(gsub(',', '', a_mean)), 
-         mean_prse = as.double(mean_prse), h_pct10 = as.double(h_pct10), h_pct25 = as.double(h_pct25), 
-         h_median = as.double(h_median), h_pct75 = as.double(h_pct75), a_pct10 = as.double(gsub(',', '', a_pct10)), 
-         a_pct25 = as.double(gsub(',', '', a_pct25)), a_median = as.double(gsub(',', '', a_median)), 
-         a_pct75 = as.double(gsub(',', '', a_pct75)), a_pct90 = as.double(gsub(',', '', a_pct90)))
+  mutate(naics = as.integer(naics), h_mean = as.double(h_mean), 
+         a_mean = as.double(gsub(',', '', a_mean)), mean_prse = as.double(mean_prse), 
+         h_pct10 = as.double(h_pct10), h_pct25 = as.double(h_pct25), 
+         h_median = as.double(h_median), h_pct75 = as.double(h_pct75), 
+         a_pct10 = as.double(gsub(',', '', a_pct10)), a_pct25 = as.double(gsub(',', '', a_pct25)), 
+         a_median = as.double(gsub(',', '', a_median)), a_pct75 = as.double(gsub(',', '', a_pct75)),
+         a_pct90 = as.double(gsub(',', '', a_pct90)))
 ```
 
 ```{r wage_analysis}
