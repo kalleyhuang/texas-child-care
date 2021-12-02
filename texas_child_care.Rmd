@@ -173,11 +173,14 @@ child_care_operations_2021 %>%
   filter(Status == 'N') %>% 
   arrange(desc(n))
 
+# count centers in each county
 # find which counties have no licensed centers
 child_care %>% 
-  count(COUNTY) %>% 
-  arrange(COUNTY)
-setdiff(toupper(children_by_county$county), child_care$COUNTY)
+  count(COUNTY)
+children_by_county %>% 
+  mutate(county = toupper(county)) %>% 
+  filter(county %in% setdiff(toupper(children_by_county$county), child_care$COUNTY)) %>% 
+  filter(county != 'TEXAS', county != 'DEAF SMITH')
 # double check for data entry: Deaf Smith entered as DEAFSMITH
 
 # calculate ratio of children under 5 to total capacity of centers in Texas
@@ -188,7 +191,7 @@ child_care %>%
   summarize(under_5 = under_3_years + X3_to_4_years + X5_years, 
             TOTAL_CAPACITY, ratio = under_5 / TOTAL_CAPACITY)
 
-# calculate ratio of children under 5 to total capacity of centers, by county
+# calculate ratio of children under 5 to total capacity of centers for each county
 child_care %>% 
   group_by(COUNTY) %>% 
   summarize(TOTAL_CAPACITY = sum(TOTAL_CAPACITY, na.rm = T)) %>% 
@@ -205,13 +208,9 @@ child_care %>%
 ```{r child_care_operations_analysis}
 # count number of centers "not caring" statewide per month
 child_care_operations_2021 %>% 
-  group_by(Week) %>% 
-  count(Status) %>% 
-  mutate(pct_no = n / sum(n) * 100) %>% 
-  filter(Status == 'N') %>% 
-  ungroup() %>% 
   group_by(month(Week)) %>% 
-  summarize(not_caring = sum(n))
+  count(Status) %>% 
+  filter(Status == 'N')
 
 # count number of centers "not caring" per county per month
 child_care_operations_2021 %>% 
@@ -247,7 +246,7 @@ child_care_operations_2021 %>%
   left_join(., child_care_operations_2021 %>% 
               filter(Status == 'N'))
 
-# calculate ratio of children under 5 to total capacity of centers caring as of Sept. 1, by county
+# calculate ratio of children under 5 to total capacity of centers caring as of Sept. 1 for each county
 child_care_operations_2021 %>% 
   filter(Week == as.Date('2021-09-01'), Status == 'Y', County != '') %>% 
   group_by(County) %>% 
@@ -258,7 +257,47 @@ child_care_operations_2021 %>%
           rename(County = county)) %>% 
   summarize(County, under_5 = under_3_years + X3_to_4_years + X5_years, 
             Capacity, ratio = under_5 / Capacity) %>% 
-  arrange(desc(ratio))
+  arrange(desc(ratio)) %>% 
+  filter(ratio >= 3)
+```
+
+```{r before_after_school_analysis}
+# count total number of before/after school programs
+before_after_schools <- child_care_operations_2021 %>% 
+  filter(Operation.Type == 'Licensed Center - Before/After School Program') %>% 
+  select(-Week, -Status) %>% 
+  group_by(Operation.Number) %>% 
+  slice(1) %>%  # addresses not entered exactly the same, so unique() doesn't work
+  ungroup()
+
+# count programs in each county
+# find which counties have no licensed programs
+before_after_schools %>% 
+  count(County)
+children_by_county %>% 
+  mutate(county = toupper(county)) %>% 
+  filter(county %in% setdiff(toupper(children_by_county$county), before_after_schools$County)) %>% 
+  filter(county != 'TEXAS')
+
+# count number of programs "not caring" statewide per month
+child_care_operations_2021 %>% 
+  filter(Operation.Type == 'Licensed Center - Before/After School Program') %>% 
+  group_by(month(Week)) %>%
+  count(Status) %>% 
+  filter(Status == 'N')
+
+# count number of programs "not caring" per county per month
+child_care_operations_2021 %>% 
+  filter(Operation.Type == 'Licensed Center - Before/After School Program') %>% 
+  group_by(month(Week), County) %>% 
+  count(Status) %>% 
+  filter(Status == 'N')
+
+child_care_operations_2021 %>% 
+  filter(Operation.Type == 'Licensed Center - Before/After School Program') %>% 
+  filter(month(Week) == 9, Status == 'N') %>% 
+  count(County) %>% 
+  arrange(desc(n))
 ```
 
 ```{r child_care_output}
@@ -284,7 +323,7 @@ not_caring_2021 <- child_care_operations_2021 %>%
          Permit.Issue.Date, PROGRAMS_PROVIDED, LICENSED_TO_SERVE_AGES)
 
 # to export spreadsheet of centers "not caring" and not in licensing data
-potentially_closed <- child_care_operations_2021 %>% 
+not_caring_not_licensed <- child_care_operations_2021 %>% 
   filter(Week == as.Date('2021-09-01')) %>% 
   mutate(Operation.Number = gsub('-|- | ', '', Operation.Number)) %>% 
   anti_join(., child_care %>% 
