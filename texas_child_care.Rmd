@@ -33,41 +33,59 @@ child_care_licenses <- child_care_licenses %>%
 child_care_operations <- child_care %>% 
   select(1:10, contains('X.CD_OPRTNG_STTS_')) %>% 
   pivot_longer(cols = starts_with('X.CD_OPRTNG_STTS_'), names_to = 'Week', 
-               names_prefix = 'X.CD_OPRTNG_STTS_', values_to = 'Status') %>% 
-  mutate(Week = mdy(Week))
+               names_prefix = 'X.CD_OPRTNG_STTS_', values_to = 'Operating_Status') %>% 
+  mutate(Week = mdy(Week)) %>% 
+  arrange(OP_NBR, Week)
 
 child_care_permits <- child_care %>% 
   select(1:10, contains('X.CD_STTS_')) %>% 
   pivot_longer(cols = starts_with('X.CD_STTS_'), names_to = 'Week', 
-               names_prefix = 'X.CD_STTS_', values_to = 'Status') %>% 
-  mutate(Week = mdy(Week))
+               names_prefix = 'X.CD_STTS_', values_to = 'Permit_Status') %>% 
+  mutate(Week = mdy(Week)) %>% 
+  arrange(OP_NBR, Week)
+
+child_care_centers <- child_care_operations %>% 
+  mutate(Permit_Status = child_care_permits$Permit_Status)
 ```
 
 ```{r child_care_checks}
 # check missingness of data per week
-child_care_operations %>% 
+child_care_centers %>% 
   group_by(Week) %>% 
-  count(Status) %>% 
+  count(Operating_Status, Permit_Status) %>% 
+  filter(Operating_Status == '', Permit_Status == '')
+
+child_care_centers %>% 
+  filter(Operating_Status != '' & Permit_Status != '') %>% 
+  group_by(Week) %>% 
+  count(Operating_Status) %>% 
   mutate(pct_n = n / sum(n) * 100)
 
-# find centers in operating data, but not licensing data
-child_care_operations %>% 
+child_care_centers %>% 
+  filter(Operating_Status != '' & Permit_Status != '') %>% 
+  group_by(Week) %>% 
+  count(Permit_Status) %>% 
+  mutate(pct_n = n / sum(n) * 100)
+
+# find centers in operations or permits data, but not licensing data
+child_care_centers %>% 
   filter(Week == as.Date('2021-11-27')) %>% 
   mutate(OP_NBR = gsub('-|- | ', '', OP_NBR)) %>% 
   anti_join(., child_care_licenses %>% 
               mutate(OPERATION_NUMBER = gsub('-|- | ', '', OPERATION_NUMBER)),
-            by = c('OP_NBR' = 'OPERATION_NUMBER'))
+            by = c('OP_NBR' = 'OPERATION_NUMBER')) %>% 
+  count(Operating_Status, Permit_Status)
 
 # find centers in licensing data, but not operating data
 child_care_licenses %>% 
   mutate(OPERATION_NUMBER = gsub('-|- | ', '', OPERATION_NUMBER)) %>% 
-  anti_join(., child_care_operations %>% 
+  anti_join(., child_care_centers %>% 
               filter(Week == as.Date('2021-09-01')) %>% 
               mutate(OP_NBR = gsub('-|- | ', '', OP_NBR)),
             by = c('OPERATION_NUMBER' = 'OP_NBR'))
 
 # count number of operations by type in most recent operating
-child_care_operations %>% 
+child_care_centers %>% 
   filter(Week == as.Date('2021-11-27')) %>% 
   count(OP_TYPE)
 
@@ -132,52 +150,54 @@ child_care_licenses %>%
 ```{r child_care_operations_analysis}
 # count number of centers "not caring" statewide per month
 child_care_operations %>% 
-  group_by(year(Week), month(Week)) %>% 
+  group_by(Week) %>% 
   count(Status) %>% 
-  filter(Status == 'N')
+  filter(Operating_Status == 'N') %>% 
+  ungroup() %>% 
+  mutate(diff = as.integer(Week - as.Date('2019-01-05'))) %>% # remove dates not in weekly time series
+  filter(diff %% 7 == 0) %>% # remove dates not in weekly time series
+  select(-diff) %>% 
+  mutate(pct_n = n / 28612 * 100)
 
-child_care_permits %>% 
+child_care_operations %>% 
+  mutate(diff = as.integer(Week - as.Date('2019-01-05'))) %>% # remove dates not in weekly time series
+  filter(diff %% 7 == 0) %>% # remove dates not in weekly time series
+  select(-diff) %>% 
   group_by(year(Week), month(Week)) %>% 
-  count(Status) %>% 
-  filter(Status == 'Closed')
+  count(Operating_Status) %>% 
+  filter(Operating_Status == 'N')
 
 # count number of centers "not caring" per county per month
 child_care_operations %>% 
   group_by(year(Week), month(Week), NM_COUNTY) %>% 
-  count(Status) %>% 
-  filter(Status == 'N') %>% 
-  # merge(., child_care_operations %>% 
-  #         filter(Week == as.Date('2021-11-27')) %>% 
-  #         count(NM_COUNTY) %>% 
-  #         filter(NM_COUNTY != '') %>% 
-  #         rename(total = n)) %>% 
-  # arrange(County, `month(Week)`) %>% 
-  # mutate(pct_not = n / total * 100) %>% 
-  # select(`month(Week)`, County, n, total, pct_not)
+  count(Operating_Status) %>% 
+  filter(Operating_Status == 'N') %>% 
+  merge(., child_care_operations %>% 
+           filter(Week == as.Date('2021-11-27')) %>% 
+           count(NM_COUNTY) %>% 
+           filter(NM_COUNTY != '') %>% 
+           rename(total = n)) %>% 
+  arrange(NM_COUNTY, `year(Week)`, `month(Week)`) %>% 
+  mutate(pct_not = n / total * 100) %>% 
+  select(`month(Week)`, `year(Week)`, NM_COUNTY, n, total, pct_not)
 
 # count types of centers "not caring" as of November 2021 and calculate their median capacity
 child_care_operations %>% 
-  filter(Status == 'N', Week == as.Date('2021-11-27')) %>% 
+  filter(Operating_Status == 'N', Week == as.Date('2021-11-27')) %>% 
   group_by(OP_TYPE) %>% 
-  summarize(NBR_TOTAL_CPCTY = median(NBR_TOTAL_CPCTY, na.rm = T)) %>% 
-  # bind_cols(., child_care_operations %>% 
-  #             filter(Status == 'N', Week == as.Date('2021-11-27')) %>% 
-  #             count(NBR_TOTAL_CPCTY) %>% 
-  #             select(n)) %>% 
-  # ungroup() %>% 
-  # mutate(pct = n / sum(n) * 100)
+  summarize(NBR_TOTAL_CPCTY = median(NBR_TOTAL_CPCTY, na.rm = T))
 
 # count number of non-unique centers "not caring"
 child_care_operations %>% 
-  filter(Status == 'N') %>% 
+  filter(Operating_Status == 'N') %>% 
   count(OP_NBR) %>% 
   filter(n > 2) %>% 
   left_join(., child_care_operations %>% 
-              filter(Status == 'N'))
+              filter(Operating_Status == 'N'))
 
 # calculate ratio of children under 5 to total capacity of centers caring as of Nov. 27 for each county
 child_care_operations %>% 
-  filter(Week == as.Date('2021-11-27'), Status == 'Y', NM_COUNTY != '') %>% 
+  filter(Week == as.Date('2021-11-27'), Operating_Status == 'Y', NM_COUNTY != '') %>% 
   group_by(NM_COUNTY) %>% 
   summarize(NBR_TOTAL_CPCTY = sum(NBR_TOTAL_CPCTY, na.rm = T)) %>% 
   merge(., children_by_county %>% 
@@ -190,11 +210,28 @@ child_care_operations %>%
   filter(ratio >= 3)
 ```
 
+```{r child_care_permits_analysis}
+child_care_permits %>% 
+  group_by(Week) %>% 
+  count(Permit_Status) %>% 
+  filter(Permit_Status == 'Closed') %>% 
+  ungroup() %>% 
+  mutate(diff = as.integer(Week - as.Date('2019-01-05'))) %>% # remove dates not in weekly time series
+  filter(diff %% 7 == 0) %>% # remove dates not in weekly time series
+  select(-diff)
+
+child_care_permits %>% 
+  filter(Permit_Status == 'Closed') %>% 
+  group_by(OP_NBR) %>% 
+  arrange(Week, .by_group = T) %>% 
+  slice(1)
+```
+
 ```{r before_after_school_analysis}
 # count total number of before/after school programs
 before_after_schools <- child_care_operations %>% 
   filter(OP_TYPE == 'Licensed Center - Before/After School Program') %>% 
-  select(-Week, -Status) %>% 
+  select(-Week, -Operating_Status) %>% 
   group_by(OP_NBR) %>% 
   slice(1) %>%  # addresses not entered exactly the same, so unique() doesn't work
   ungroup()
@@ -212,19 +249,19 @@ children_by_county %>%
 child_care_operations %>% 
   filter(OP_TYPE == 'Licensed Center - Before/After School Program') %>% 
   group_by(month(Week)) %>%
-  count(Status) %>% 
-  filter(Status == 'N')
+  count(Operating_Status) %>% 
+  filter(Operating_Status == 'N')
 
 # count number of programs "not caring" per county per month
 child_care_operations %>% 
   filter(OP_TYPE == 'Licensed Center - Before/After School Program') %>% 
   group_by(month(Week), NM_COUNTY) %>% 
-  count(Status) %>% 
-  filter(Status == 'N')
+  count(Operating_Status) %>% 
+  filter(Operating_Status == 'N')
 
 child_care_operations %>% 
   filter(OP_TYPE == 'Licensed Center - Before/After School Program') %>% 
-  filter(month(Week) == 9, Status == 'N') %>% 
+  filter(month(Week) == 9, Operating_Status == 'N') %>% 
   count(NM_COUNTY) %>% 
   arrange(desc(n))
 ```
@@ -241,11 +278,12 @@ child_care_licenses %>%
 
 # visualize number of centers "not caring" from January 2019 to November 2021
 child_care_operations %>% 
-  group_by(month(Week)) %>% 
-  count(Status) %>% 
-  filter(Status == 'N') %>% 
-  mutate(month = as.character(`month(Week)`), date = mdy(paste0(month, '/01/2021'))) %>% 
-  ggplot(data = ., mapping = aes(x = date, y = n)) +
+  group_by(Week) %>% 
+  count(Operating_Status) %>% 
+  filter(Operating_Status == 'N') %>% 
+  # mutate(month = as.character(`month(Week)`), year = as.character(`year(Week)`),
+  #       date = mdy(paste0(month, '/01/', year))) %>% 
+  ggplot(data = ., mapping = aes(x = Week, y = n)) +
   geom_line()
 ```
 
