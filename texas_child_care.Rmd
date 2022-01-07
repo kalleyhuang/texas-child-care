@@ -212,6 +212,24 @@ child_care_centers %>%
             NBR_TOTAL_CPCTY, ratio = under_5 / NBR_TOTAL_CPCTY) %>% 
   arrange(desc(ratio)) %>% 
   filter(ratio >= 3)
+
+# compare number of fully licensed centers in Feb. 1, 2020 to Nov. 27, 2021
+child_care_centers %>% 
+  filter(Permit_Status == 'Full', NM_COUNTY != '') %>% 
+  group_by(NM_COUNTY, Week) %>% 
+  summarize(total_capacity = sum(NBR_TOTAL_CPCTY, na.rm = T)) %>% 
+  merge(., children_by_county %>% 
+          filter(county != 'Texas') %>% 
+          mutate(county = toupper(county)) %>% 
+          rename(NM_COUNTY = county)) %>% 
+  summarize(Week, NM_COUNTY, under_5 = under_3_years + X3_to_4_years + X5_years, 
+            total_capacity, ratio = under_5 / total_capacity) %>% 
+  arrange(NM_COUNTY, Week) %>% 
+  filter(Week == as.Date('2021-11-27') | Week == as.Date('2020-02-01')) %>% 
+  select(Week, NM_COUNTY, ratio) %>% 
+  pivot_wider(names_from = Week, values_from = ratio) %>% 
+  #filter(`2020-02-01` < 3 & `2021-11-27` >= 3) %>% 
+  filter(`2020-02-01` >= 3 & `2021-11-27` > `2020-02-01`)
 ```
 
 ```{r child_care_permits_analysis}
