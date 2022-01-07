@@ -241,31 +241,43 @@ child_care_permits %>%
 
 ```{r before_after_school_analysis}
 before_after_schools <- child_care_centers %>% 
-  filter(OP_TYPE == 'Licensed Center - Before/After School Program', 
-         Permit_Status == 'Full', Week == as.Date('2021-11-27'))
+  filter(OP_TYPE == 'Licensed Center - Before/After School Program', Permit_Status == 'Full')
 
 # count programs in each county as of Nov. 27
 # find which counties have no licensed programs
 before_after_schools %>% 
+  filter(Week == as.Date('2021-11-27')) %>% 
   count(NM_COUNTY)
 children_by_county %>% 
   mutate(county = toupper(county)) %>% 
-  filter(county %in% setdiff(toupper(children_by_county$county), before_after_schools$NM_COUNTY)) %>% 
+  filter(county %in% setdiff(toupper(children_by_county$county), 
+                             filter(before_after_schools, Week == as.Date('2021-11-27'))$NM_COUNTY)) %>% 
   filter(county != 'TEXAS')
 
-# count total number of fully licensed centers providing before/after school care statewide per month
-child_care_centers %>% 
-  filter(OP_TYPE == 'Licensed Center - Before/After School Program', 
-         Permit_Status == 'Full', day(Week) == 1) %>% 
+# count number of centers fully licensed for before/after school care statewide per month
+before_after_schools %>% 
+  filter(day(Week) == 1) %>% 
+  count(Week)
+
+# count number of new before/after school program closures per month
+child_care_permits %>% 
+  filter(OP_TYPE == 'Licensed Center - Before/After School Program', Permit_Status == 'Closed') %>% 
+  group_by(OP_NBR) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  count(year(Week), month(Week))
+
+# count number of fully licensed centers providing before/after school care statewide per month
+before_after_schools %>% 
+  filter(day(Week) == 1) %>% 
   group_by(Week) %>% 
   count(Operating_Status) %>% 
   mutate(pct_caring = n / sum(n) * 100) %>% 
   filter(Operating_Status == 'Y')
 
 # count number of programs "not caring" per county per month
-child_care_centers %>% 
-  filter(OP_TYPE == 'Licensed Center - Before/After School Program', 
-         Permit_Status == 'Full', day(Week) == 1) %>% 
+before_after_schools %>% 
+  filter(day(Week) == 1) %>% 
   group_by(Week, NM_COUNTY) %>% 
   count(Operating_Status) %>% 
   mutate(pct_caring = n / sum(n) * 100) %>% 
@@ -314,7 +326,15 @@ child_care_permits %>%
   scale_y_continuous(limits = c(0, 500)) +
   theme_classic()
 
-# chart percent of fully licensed centers providing before/after school care statewide per month
+# chart number of centers fully licensed for before/after school care from January 2019 to November 2021
+before_after_schools %>% 
+  filter(day(Week) == 1) %>% 
+  count(Week) %>% 
+  ggplot(data = ., mapping = aes(x = Week, y = n)) +
+  geom_line() +
+  theme_classic()
+
+# chart percent of fully licensed centers providing before/after school care from January 2019 to November 2021
 child_care_centers %>% 
   filter(OP_TYPE == 'Licensed Center - Before/After School Program', 
          Permit_Status == 'Full', day(Week) == 1) %>% 
