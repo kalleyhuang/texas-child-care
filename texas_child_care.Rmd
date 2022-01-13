@@ -302,6 +302,55 @@ before_after_schools %>%
   filter(Operating_Status == 'N')
 ```
 
+```{r reporting}
+# find centers for Mitchell
+child_care_permits %>% 
+  filter(Permit_Status == 'Closed') %>% 
+  group_by(OP_NBR) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  filter(Week >= as.Date('2020-03-01')) %>% 
+  filter(NM_COUNTY %in% child_care_deserts$COUNTY) %>% # to find closed centers in deserts
+  arrange(desc(NBR_TOTAL_CPCTY)) # to find closed centers with large capacities
+
+child_care_centers %>% 
+  filter(Permit_Status == 'Full', Operating_Status == 'Y', Week == as.Date('2021-11-27')) %>% 
+  filter(NM_COUNTY %in% child_care_deserts$COUNTY) # to find still open centers in deserts
+
+# use 2019 for benchmark numbers
+# count average number of fully licensed centers providing care statewide per month
+child_care_centers %>% 
+  filter(Permit_Status == 'Full') %>% 
+  group_by(Week) %>% 
+  count(Operating_Status) %>% 
+  filter(Operating_Status == 'Y') %>% 
+  group_by(year(Week), month(Week)) %>% 
+  summarize(mean = mean(n)) %>% 
+  pivot_wider(names_from = `year(Week)`, values_from = mean)
+
+# chart number of fully licensed centers providing care statewide per week
+child_care_centers %>% 
+  filter(Permit_Status == 'Full') %>% 
+  group_by(Week) %>% 
+  count(Operating_Status) %>% 
+  filter(Operating_Status == 'Y') %>% 
+  ggplot(data = ., mapping = aes(x = Week, y = n)) + 
+  geom_line() +
+  theme_classic()
+
+# chart average number of fully licensed centers providing before/after school care statewide per month
+before_after_schools %>% 
+  group_by(Week) %>% 
+  count(Operating_Status) %>% 
+  filter(Operating_Status == 'Y') %>% 
+  group_by(year(Week), month(Week)) %>% 
+  summarize(date = mdy(paste0(as.character(`month(Week)`), '/01/', `year(Week)`)),
+            mean = mean(n)) %>% 
+  ggplot(data = ., mapping = aes(x = date, y = mean)) + 
+  geom_line() +
+  theme_classic()
+```
+
 ```{r child_care_viz}
 # chart number of child care licenses issued since 1983
 child_care_licenses %>% 
