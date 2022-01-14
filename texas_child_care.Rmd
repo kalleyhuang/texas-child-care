@@ -216,6 +216,29 @@ child_care_centers %>%
   pivot_wider(names_from = Week, values_from = ratio) %>% 
   #filter(`2020-02-01` < 3 & `2021-11-27` >= 3) %>% 
   filter(`2020-02-01` >= 3 & `2021-11-27` > `2020-02-01`)
+
+# calculate percent change in number of fully licensed centers providing care from January 1, 2020, by type
+child_care_centers %>% 
+  filter(Permit_Status == 'Full') %>% 
+  group_by(OP_TYPE, Week) %>% 
+  count(Operating_Status) %>% 
+  filter(Operating_Status == 'Y', year(Week) >= 2020) %>% 
+  select(-Operating_Status) %>% 
+  ungroup() %>% 
+  group_by(OP_TYPE) %>% 
+  mutate(pct_change = (n - first(n)) / first(n) * 100)
+
+child_care_centers %>% 
+  filter(Permit_Status == 'Full') %>% 
+  mutate(Type = case_when(grepl('Licensed Center', OP_TYPE) ~ 'Center',
+                          grepl('Home', OP_TYPE) ~ 'Home')) %>% 
+  group_by(Type, Week) %>% 
+  count(Operating_Status) %>% 
+  filter(Operating_Status == 'Y', year(Week) >= 2020) %>% 
+  select(-Operating_Status) %>% 
+  ungroup() %>% 
+  group_by(Type) %>% 
+  mutate(pct_change = (n - first(n)) / first(n) * 100)
 ```
 
 ```{r child_care_permits_analysis}
