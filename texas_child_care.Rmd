@@ -475,7 +475,7 @@ colnames(oes_2014) <- colnames(oes_2020)
 colnames(oes_2011) <- colnames(oes_2020)
 oes_2019$loc_quotient <- as.character(oes_2019$loc_quotient)
 
-all <- bind_rows(oes_2011, oes_2012, oes_2013, oes_2014, oes_2015,
+wages <- bind_rows(oes_2011, oes_2012, oes_2013, oes_2014, oes_2015,
           oes_2016, oes_2017, oes_2018, oes_2019, oes_2020) %>% 
   mutate(naics = as.integer(naics), h_mean = as.double(h_mean), 
          a_mean = as.double(gsub(',', '', a_mean)), mean_prse = as.double(mean_prse), 
@@ -487,15 +487,17 @@ all <- bind_rows(oes_2011, oes_2012, oes_2013, oes_2014, oes_2015,
 ```
 
 ```{r wage_analysis}
+wages <- read.csv('wages.csv')
+
 # calculate change in median hourly wage for child care workers in each MSA from 2011 to 2020
-all %>% 
+wages %>% 
   filter(occ_code == '39-9011') %>% 
   select(year, area, h_median) %>% 
   filter(year == 2011 | year == 2020) %>% 
   pivot_wider(names_from = year, values_from = h_median) %>% 
   mutate(change = `2020` - `2011`) %>% 
   arrange(area) %>% 
-  bind_cols(., all %>% 
+  bind_cols(., wages %>% 
               filter(occ_code == '39-9011') %>% 
               arrange(year) %>% 
               slice(1:32) %>%
@@ -503,13 +505,13 @@ all %>%
   arrange(desc(change))
 
 # compare median hourly wage for each job in each MSA in 2020
-all %>% 
+wages %>% 
   filter(area != 48) %>% 
   select(year, area, occ_title, a_median) %>% 
   mutate(hourly_median = a_median / (40 * 52)) %>% 
   select(-a_median) %>% 
   filter(year == 2020) %>% 
-  left_join(., all %>% 
+  left_join(., wages %>% 
               filter(area != 48) %>% 
               arrange(year) %>% 
               slice(1:179) %>% 
@@ -522,12 +524,12 @@ all %>%
                           'Preschool Teachers, Except Special Education',
                           'Kindergarten Teachers, Except Special Education'))
 
-all %>% 
+wages %>% 
   filter(area == 47020, year == 2020) %>% 
   select(occ_title, h_median)
 
 # calculate change in median hourly wage for each job in each MSA from 2011 to 2020
-all %>% 
+wages %>% 
   filter(area != 48) %>% 
   select(year, area, occ_title, a_median) %>% 
   mutate(hourly_median = a_median / (40 * 52)) %>% 
@@ -535,7 +537,7 @@ all %>%
   filter(year == 2011 | year == 2020) %>% 
   pivot_wider(names_from = year, values_from = hourly_median) %>% 
   mutate(change = `2020` - `2011`) %>% 
-  left_join(., all %>% 
+  left_join(., wages %>% 
               filter(area != 48) %>% 
               arrange(year) %>% 
               slice(1:179) %>% 
@@ -547,7 +549,7 @@ all %>%
   filter(occ_title %in% c('Retail Salespersons', 'Childcare Workers'))
 
 # calculate change in median hourly wage for each job statewide from 2011 to 2020
-all %>% 
+wages %>% 
   filter(area == 48) %>% 
   select(year, occ_title, a_median) %>% 
   mutate(hourly_median = a_median / (40 * 52)) %>% 
@@ -558,7 +560,7 @@ all %>%
 
 ```{r wage_viz}
 # visualize median hourly wage for childcare workers from 2011 to 2020
-all %>% 
+wages %>% 
   filter(area == 48, occ_code == '39-9011') %>% 
   ggplot(data = ., mapping = aes(x = year, y = h_median)) +
   geom_line() +
