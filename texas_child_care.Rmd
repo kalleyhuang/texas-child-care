@@ -31,14 +31,16 @@ child_care_licenses <- child_care_licenses %>%
   mutate(ISSUANCE_DATE = mdy(ISSUANCE_DATE))
 
 child_care_centers <- child_care_centers %>% 
-  select(1:10, contains('X.CD_OPRTNG_STTS_')) %>% 
+  select(1:11, contains('X.CD_OPRTNG_STTS_')) %>% 
   pivot_longer(cols = starts_with('X.CD_OPRTNG_STTS_'), names_to = 'Week', 
                names_prefix = 'X.CD_OPRTNG_STTS_', values_to = 'Operating_Status') %>% 
   merge(., child_care_centers %>% 
-          select(1:10, contains('X.CD_STTS_')) %>% 
+          select(1:11, contains('X.CD_STTS_')) %>% 
           pivot_longer(cols = starts_with('X.CD_STTS_'), names_to = 'Week', 
-                       names_prefix = 'X.CD_STTS_', values_to = 'Permit_Status')) %>% 
-  mutate(Week = mdy(Week)) %>% 
+                       names_prefix = 'X.CD_STTS_', values_to = 'Permit_Status'))
+
+child_care_centers <- child_care_centers %>% 
+  mutate(Week = mdy(Week), DT_LCNS_ISSUE = as.Date(as.character(mdy_hms(DT_LCNS_ISSUE)))) %>% 
   arrange(OP_NBR, Week)
 ```
 
@@ -248,13 +250,32 @@ child_care_centers %>%
   count(Week) %>% 
   mutate(raw_diff = n - lag(n), pct_diff = (n - lag(n)) / lag(n) * 100)
 
-# count number of new closures per week
+# count number of new closures per month
 child_care_centers %>% 
   filter(Permit_Status == 'Closed') %>% 
   group_by(OP_NBR) %>% 
   slice(1) %>% 
   ungroup() %>% 
-  count(Week)
+  count(year(Week), month(Week))
+
+# check whether any centers reported as full after reporting as closed
+child_care_centers %>% 
+  group_by(OP_NBR) %>% 
+  filter(any(Permit_Status == 'Closed')) %>% 
+  merge(., child_care_centers %>% 
+          filter(Permit_Status == 'Closed') %>% 
+          group_by(OP_NBR) %>%
+          slice(tail(row_number(), 1)) %>% 
+          mutate(Closure_Date = Week) %>% 
+          select(OP_NBR, Closure_Date)) %>% 
+  filter(Week >= Closure_Date) %>% 
+  count(Permit_Status)
+
+# count number of licenses issued per month
+child_care_centers %>% 
+  select(-Week, -Operating_Status, -Permit_Status) %>% 
+  unique() %>% 
+  count(year(DT_LCNS_ISSUE), month(DT_LCNS_ISSUE))
 ```
 
 ```{r before_after_school_analysis}
