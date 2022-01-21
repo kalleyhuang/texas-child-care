@@ -42,6 +42,8 @@ child_care_centers <- child_care_centers %>%
 child_care_centers <- child_care_centers %>% 
   mutate(Week = mdy(Week), DT_LCNS_ISSUE = as.Date(as.character(mdy_hms(DT_LCNS_ISSUE)))) %>% 
   arrange(OP_NBR, Week)
+
+child_care_centers$NM_COUNTY[child_care_centers$NM_COUNTY == 'DEAFSMITH'] <- 'DEAF SMITH'
 ```
 
 ```{r child_care_checks}
