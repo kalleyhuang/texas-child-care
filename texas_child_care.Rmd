@@ -20,6 +20,9 @@ child_care_licenses <- read.csv('child_care_licenses.csv')
 # requested from HHSC, received Jan. 5
 child_care_centers <- read.csv('child_care_centers.csv')
 
+# from https://www.hhs.texas.gov/about/records-statistics/data-statistics/child-care-regulation-statistics
+child_care_centers_2021_12 <- read.csv('./raw_csv/child_care_operations_2021_12.csv')
+
 # county from https://censusreporter.org/data/table/?table=B09001&geo_ids=04000US48,050|04000US48&primary_geo_id=04000US48#
 # zip code from https://censusreporter.org/data/table/?table=B09001&geo_ids=04000US48,050|04000US48,860|04000US48&primary_geo_id=04000US48#
 children_by_county <- read.csv('children_by_county.csv')
@@ -44,6 +47,36 @@ child_care_centers <- child_care_centers %>%
   arrange(OP_NBR, Week)
 
 child_care_centers$NM_COUNTY[child_care_centers$NM_COUNTY == 'DEAFSMITH'] <- 'DEAF SMITH'
+
+child_care_operations_2021_12 <- child_care_centers_2021_12 %>% 
+  rename(OP_NBR = Operation.Number, NBR_REGION = Operation.Region, NM_FCLTY = Operation.Name,
+         ADDR_LN1 = Address.Line.1, ADDR_LN2 = Address.Line.2, ADDR_CITY = City, ADDR_ZIP1 = Zip.Code,
+         NM_COUNTY = County, OP_TYPE = Operation.Type, NBR_TOTAL_CPCTY = Capacity, 
+         DT_LCNS_ISSUE = Permit.Issue.Date) %>% 
+  select(1:11, contains('Operating.Status.')) %>% 
+  pivot_longer(cols = starts_with('Operating.Status.'), names_to = 'Week', 
+               names_prefix = 'Operating.Status.', values_to = 'Operating_Status') %>%
+  mutate(DT_LCNS_ISSUE = mdy(DT_LCNS_ISSUE), Week = mdy(Week))
+  
+child_care_permits_2021_12 <- child_care_centers_2021_12 %>% 
+  rename(OP_NBR = Operation.Number, NBR_REGION = Operation.Region, NM_FCLTY = Operation.Name,
+         ADDR_LN1 = Address.Line.1, ADDR_LN2 = Address.Line.2, ADDR_CITY = City, ADDR_ZIP1 = Zip.Code,
+         NM_COUNTY = County, OP_TYPE = Operation.Type, NBR_TOTAL_CPCTY = Capacity, 
+         DT_LCNS_ISSUE = Permit.Issue.Date) %>% 
+  select(1:11, contains('Permit.Status.')) %>% 
+  pivot_longer(cols = starts_with('Permit.Status.'), names_to = 'Week', 
+               names_prefix = 'Permit.Status.', values_to = 'Permit_Status') %>% 
+  mutate(DT_LCNS_ISSUE = mdy(DT_LCNS_ISSUE), Week = mdy(Week))
+
+child_care_centers_2021_12 <- bind_cols(child_care_operations_2021_12, child_care_permits_2021_12 %>% 
+                                          select(OP_NBR, Week, Permit_Status)) %>% 
+  select(-OP_NBR...14, -Week...15) %>% 
+  rename(OP_NBR = OP_NBR...1, Week = Week...12) %>% 
+  mutate(NBR_REGION = as.integer(NBR_REGION)) %>% 
+  filter(OP_NBR != '')
+child_care_centers <- child_care_centers %>% 
+  bind_rows(., child_care_centers_2021_12) %>% 
+  arrange(OP_NBR, Week)
 ```
 
 ```{r child_care_checks}
@@ -73,7 +106,7 @@ child_care_centers %>%
 
 # find centers in operations or permits data, but not licensing data
 child_care_centers %>% 
-  filter(Week == as.Date('2021-11-27')) %>% 
+  filter(Week == as.Date('2021-12-01')) %>% 
   mutate(OP_NBR = gsub('-|- | ', '', OP_NBR)) %>% 
   anti_join(., child_care_licenses %>% 
               mutate(OPERATION_NUMBER = gsub('-|- | ', '', OPERATION_NUMBER)),
@@ -90,7 +123,7 @@ child_care_licenses %>%
 
 # count number of operations by type in most recent operating data
 child_care_centers %>% 
-  filter(Week == as.Date('2021-11-27')) %>% 
+  filter(Week == as.Date('2021-12-01')) %>% 
   count(OP_TYPE)
 
 # count number of operations by type in licensing data
@@ -160,10 +193,10 @@ child_care_centers %>%
   mutate(total = sum(n), pct_not_caring = n / total * 100) %>% 
   filter(Operating_Status == 'N')
 
-# find percent of fully licensed centers providing child care in Feb. 1, 2020
-# compare to percent of fully licensed centers providing child care as of Nov. 27, 2021
+# find percent of fully licensed centers providing child care in February 2020
+# compare to percent of fully licensed centers providing child care as of December 2021
 child_care_centers %>% 
-  filter(Permit_Status == 'Full', Week == as.Date('2021-11-27') | Week == as.Date('2020-02-01')) %>% 
+  filter(Permit_Status == 'Full', Week == as.Date('2021-12-01') | Week == as.Date('2020-02-01')) %>% 
   group_by(Week, NM_COUNTY) %>% 
   count(Operating_Status) %>% 
   mutate(pct_caring = n / sum(n) * 100) %>% 
@@ -174,18 +207,18 @@ child_care_centers %>%
   mutate(diff = `2021-11-27` - `2020-02-01`) %>% 
   filter(diff < 0) %>% 
   merge(., child_care_centers %>% 
-          filter(Permit_Status == 'Full', Week == as.Date('2021-11-27')) %>% 
+          filter(Permit_Status == 'Full', Week == as.Date('2021-12-01')) %>% 
           count(NM_COUNTY) %>% 
           rename(total = n)) %>% 
   mutate(desert = NM_COUNTY %in% child_care_deserts$COUNTY) %>% 
   arrange(diff)
 
-# count types of fully licensed centers "not caring" as of Nov. 27 and calculate their median capacity
+# count types of fully licensed centers "not caring" as of December 2021 and calculate their median capacity
 child_care_centers %>% 
-  filter(Operating_Status == 'N', Permit_Status == 'Full', Week == as.Date('2021-11-27')) %>% 
+  filter(Operating_Status == 'N', Permit_Status == 'Full', Week == as.Date('2021-12-01')) %>% 
   count(OP_TYPE) %>% 
   merge(., child_care_centers %>% 
-    filter(Operating_Status == 'N', Permit_Status == 'Full', Week == as.Date('2021-11-27')) %>% 
+    filter(Operating_Status == 'N', Permit_Status == 'Full', Week == as.Date('2021-12-01')) %>% 
     group_by(OP_TYPE) %>% 
     summarize(NBR_TOTAL_CPCTY = median(NBR_TOTAL_CPCTY, na.rm = T)))
 
@@ -200,9 +233,9 @@ child_care_centers %>%
           rename(NM_COUNTY = county)) %>% 
   summarize(Week, NM_COUNTY, under_5 = under_3_years + X3_to_4_years + X5_years, 
             NBR_TOTAL_CPCTY, ratio = under_5 / NBR_TOTAL_CPCTY) %>% 
-  filter(Week == as.Date('2021-11-27')) %>% 
+  filter(Week == as.Date('2021-12-01')) %>% 
   merge(., child_care_centers %>% 
-          filter(NM_COUNTY != '', Week == as.Date('2021-11-27')) %>% 
+          filter(NM_COUNTY != '', Week == as.Date('2021-12-01')) %>% 
           count(NM_COUNTY, OP_TYPE) %>% 
           pivot_wider(names_from = OP_TYPE, values_from = n))
 
@@ -295,15 +328,15 @@ before_after_schools %>%
   mutate(pct_caring = n / sum(n) * 100) %>% 
   filter(Operating_Status == 'N')
 
-# count programs in each county as of Nov. 27
+# count programs in each county as of December 2021
 # find which counties have no licensed programs
 before_after_schools %>% 
-  filter(Week == as.Date('2021-11-27')) %>% 
+  filter(Week == as.Date('2021-12-01')) %>% 
   count(NM_COUNTY)
 children_by_county %>% 
   mutate(county = toupper(county)) %>% 
   filter(county %in% setdiff(toupper(children_by_county$county), 
-                             filter(before_after_schools, Week == as.Date('2021-11-27'))$NM_COUNTY)) %>% 
+                             filter(before_after_schools, Week == as.Date('2021-12-01'))$NM_COUNTY)) %>% 
   filter(county != 'TEXAS')
 
 # count number of centers fully licensed for before/after school care statewide per week
@@ -332,7 +365,7 @@ child_care_centers %>%
   arrange(desc(NBR_TOTAL_CPCTY)) # to find closed centers with large capacities
 
 child_care_centers %>% 
-  filter(Permit_Status == 'Full', Operating_Status == 'Y', Week == as.Date('2021-11-27')) %>% 
+  filter(Permit_Status == 'Full', Operating_Status == 'Y', Week == as.Date('2021-12-01')) %>% 
   filter(NM_COUNTY %in% child_care_deserts$COUNTY) # to find still open centers in deserts
 ```
 
@@ -346,7 +379,7 @@ child_care_licenses %>%
   geom_line() +
   theme_classic()
 
-# chart number of fully licensed centers providing child care from January 2019 to November 2021
+# chart number of fully licensed centers providing child care from January 2019 to December 2021
 child_care_centers %>% 
   filter(Permit_Status == 'Full') %>% 
   group_by(Week) %>% 
@@ -356,7 +389,7 @@ child_care_centers %>%
   geom_line() +
   theme_classic()
 
-# chart percent of fully licensed centers providing child care from January 2019 to November 2021
+# chart percent of fully licensed centers providing child care from January 2019 to December 2021
 child_care_centers %>% 
   filter(Permit_Status == 'Full') %>% 
   group_by(Week) %>% 
@@ -367,7 +400,7 @@ child_care_centers %>%
   geom_line() +
   theme_classic()
 
-# chart number of fully licensed centers from January 2019 to November 2021
+# chart number of fully licensed centers from January 2019 to December 2021
 child_care_centers %>% 
   filter(Permit_Status == 'Full') %>% 
   count(Week) %>% 
@@ -375,7 +408,7 @@ child_care_centers %>%
   geom_line() +
   theme_classic()
 
-# chart number of new center closures from January 2019 to November 2021
+# chart number of new center closures from January 2019 to December 2021
 child_care_centers %>% 
   filter(Permit_Status == 'Closed') %>% 
   group_by(OP_NBR) %>% 
@@ -388,7 +421,7 @@ child_care_centers %>%
   scale_y_continuous(limits = c(0, 500)) +
   theme_classic()
 
-# chart number of fully licensed centers providing before/after school care from January 2019 to November 2021
+# chart number of fully licensed centers providing before/after school care from January 2019 to December 2021
 before_after_schools %>% 
   group_by(Week) %>% 
   count(Operating_Status) %>% 
@@ -397,7 +430,7 @@ before_after_schools %>%
   geom_line() +
   theme_classic()
 
-# chart percent of fully licensed centers providing before/after school care from January 2019 to November 2021
+# chart percent of fully licensed centers providing before/after school care from January 2019 to December 2021
 before_after_schools %>% 
   group_by(Week) %>% 
   count(Operating_Status) %>% 
@@ -407,7 +440,7 @@ before_after_schools %>%
   geom_line() +
   theme_classic()
 
-# chart number of centers fully licensed for before/after school care from January 2019 to November 2021
+# chart number of centers fully licensed for before/after school care from January 2019 to December 2021
 before_after_schools %>% 
   count(Week) %>% 
   ggplot(data = ., mapping = aes(x = Week, y = n)) +
