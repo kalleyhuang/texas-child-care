@@ -151,8 +151,7 @@ child_care_licenses %>%
 children_by_county %>% 
   mutate(county = toupper(county)) %>% 
   filter(county %in% setdiff(toupper(children_by_county$county), child_care_licenses$COUNTY)) %>% 
-  filter(county != 'TEXAS', county != 'DEAF SMITH')
-# double check for data entry: Deaf Smith entered as DEAFSMITH
+  filter(county != 'TEXAS')
 
 # calculate ratio of children under 5 to total capacity of centers in Texas
 child_care_licenses %>% 
@@ -273,6 +272,14 @@ child_care_centers %>%
   ungroup() %>% 
   group_by(Type) %>% 
   mutate(pct_change = (n - first(n)) / first(n) * 100)
+
+child_care_centers %>% 
+  filter(Permit_Status == 'Full') %>% 
+  mutate(Type = case_when(grepl('Licensed Center', OP_TYPE) ~ 'Center',
+                          grepl('Home', OP_TYPE) ~ 'Home')) %>% 
+  filter(Operating_Status == 'Y', year(Week) >= 2020) %>% 
+  group_by(Type, Week) %>% 
+  summarize(capacity = sum(NBR_TOTAL_CPCTY, na.rm = T))
 ```
 
 ```{r child_care_permits_analysis}
