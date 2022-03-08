@@ -20,10 +20,8 @@ child_care_licenses <- read.csv('child_care_licenses.csv')
 # requested from HHSC, received Jan. 5
 child_care_centers <- read.csv('child_care_centers.csv')
 
-# from https://www.hhs.texas.gov/about/records-statistics/data-statistics/child-care-regulation-statistics
-child_care_centers_2021_12 <- read.csv('./raw_csv/child_care_operations_2021_12.csv')
-
 # from https://etss.hhs.texas.gov/t/DAP-RSDA/views/DCMonthlyOperationStatusChanges/WeeklyStatusChanges?%3Aembed=y&%3AisGuestRedirectFromVizportal=y
+child_care_centers_2021_12 <- read.csv('./raw_csv/child_care_operations_2021_12.csv')
 child_care_centers_2022_01 <- read.csv('./raw_csv/child_care_operations_2022_01.csv')
 
 # county from https://censusreporter.org/data/table/?table=B09001&geo_ids=04000US48,050|04000US48&primary_geo_id=04000US48#
@@ -32,13 +30,11 @@ children_by_county <- read.csv('children_by_county.csv')
 children_by_zip <- read.csv('children_by_zip.csv')
 ```
 
-```{r}
-```
-
 ```{r child_care_cleaning}
 child_care_licenses <- child_care_licenses %>% 
   mutate(ISSUANCE_DATE = mdy(ISSUANCE_DATE))
 
+# lengthen dataset so that each week is a row with corresponding operating and permit statuses
 child_care_centers <- child_care_centers %>% 
   select(1:11, contains('X.CD_OPRTNG_STTS_')) %>% 
   pivot_longer(cols = starts_with('X.CD_OPRTNG_STTS_'), names_to = 'Week', 
@@ -108,6 +104,8 @@ child_care_centers_2022_01 <- bind_cols(child_care_operations_2022_01, child_car
   mutate(NBR_REGION = as.integer(NBR_REGION)) %>% 
   filter(OP_NBR != '')
 
+# Note from HHSC: Weekly Effective Date, Operating Status, and Permit Status values are displayed as of the first day of the timeframe and then again only if they change from week to week.
+# fill out dataset
 status <- function(df) {
   df %>% 
     group_by(OP_NBR) %>% 
@@ -188,15 +186,12 @@ child_care_licenses %>%
   arrange(`year(ISSUANCE_DATE)`, `month(ISSUANCE_DATE)`)
   #arrange(n)
 
-# count number of licenses issued in each county
+# count centers in each county
 child_care_licenses %>% 
   count(COUNTY) %>% 
   arrange(desc(n))
 
-# count centers in each county
 # find which counties have no licensed centers
-child_care_licenses %>% 
-  count(COUNTY)
 children_by_county %>% 
   mutate(county = toupper(county)) %>% 
   filter(county %in% setdiff(toupper(children_by_county$county), child_care_licenses$COUNTY)) %>% 
@@ -312,6 +307,7 @@ child_care_centers %>%
   group_by(OP_TYPE) %>% 
   mutate(pct_change = (n - first(n)) / first(n) * 100)
 
+# count number of child care centers and homes providing care statewide per week
 child_care_centers %>% 
   filter(Permit_Status == 'Full') %>% 
   mutate(Type = case_when(grepl('Licensed Center', OP_TYPE) ~ 'Center',
@@ -324,6 +320,8 @@ child_care_centers %>%
   group_by(Type) %>% 
   mutate(pct_change = (n - first(n)) / first(n) * 100)
 
+# count seats in child care centers and homes providing care statewide per week
+# for graph 'Texas child care centers and homes'
 child_care_centers %>% 
   filter(Permit_Status == 'Full') %>% 
   mutate(Type = case_when(grepl('Licensed Center', OP_TYPE) ~ 'Center',
@@ -387,11 +385,12 @@ before_after_schools %>%
   mutate(pct_caring = n / sum(n) * 100) %>% 
   filter(Operating_Status == 'N')
 
-# count programs in each county as of December 2021
-# find which counties have no licensed programs
+# count programs in each county as of January 2022
 before_after_schools %>% 
-  filter(Week == as.Date('2021-12-01')) %>% 
+  filter(Week == as.Date('2022-01-01')) %>% 
   count(NM_COUNTY)
+
+# find which counties have no licensed programs
 children_by_county %>% 
   mutate(county = toupper(county)) %>% 
   filter(county %in% setdiff(toupper(children_by_county$county), 
