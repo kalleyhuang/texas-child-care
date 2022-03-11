@@ -55,7 +55,7 @@ child_care_operations_2021_12 <- child_care_centers_2021_12 %>%
          ADDR_LN1 = Address.Line.1, ADDR_LN2 = Address.Line.2, ADDR_CITY = City, ADDR_ZIP1 = Zip.Code,
          NM_COUNTY = County, OP_TYPE = Operation.Type, NBR_TOTAL_CPCTY = Capacity, 
          DT_LCNS_ISSUE = Permit.Issue.Date) %>% 
-  select(1:11, contains('Operating.Status.')) %>% 
+  select(1:3, 4:12, contains('Operating.Status.')) %>% 
   pivot_longer(cols = starts_with('Operating.Status.'), names_to = 'Week', 
                names_prefix = 'Operating.Status.', values_to = 'Operating_Status') %>%
   mutate(DT_LCNS_ISSUE = mdy(DT_LCNS_ISSUE), Week = mdy(Week))
@@ -65,7 +65,7 @@ child_care_permits_2021_12 <- child_care_centers_2021_12 %>%
          ADDR_LN1 = Address.Line.1, ADDR_LN2 = Address.Line.2, ADDR_CITY = City, ADDR_ZIP1 = Zip.Code,
          NM_COUNTY = County, OP_TYPE = Operation.Type, NBR_TOTAL_CPCTY = Capacity, 
          DT_LCNS_ISSUE = Permit.Issue.Date) %>% 
-  select(1:11, contains('Permit.Status.')) %>% 
+  select(1:3, 4:12, contains('Permit.Status.')) %>% 
   pivot_longer(cols = starts_with('Permit.Status.'), names_to = 'Week', 
                names_prefix = 'Permit.Status.', values_to = 'Permit_Status') %>% 
   mutate(DT_LCNS_ISSUE = mdy(DT_LCNS_ISSUE), Week = mdy(Week))
@@ -222,12 +222,15 @@ child_care_deserts <- child_care_licenses %>%
 ```{r child_care_operations_analysis}
 # count number of fully licensed centers providing care statewide per week
 # for graph 'Texas child care centers yet to recover from pandemic closures'
+# for spreadsheet 'all_operations'
 child_care_centers %>% 
   filter(Permit_Status == 'Full') %>% 
   group_by(Week) %>% 
   count(Operating_Status) %>% 
-  mutate(pct_caring = n / sum(n) * 100) %>% 
-  filter(Operating_Status == 'Y')
+  filter(Operating_Status == 'Y' | Operating_Status == 'N') %>% 
+  pivot_wider(names_from = Operating_Status, values_from = n) %>% 
+  mutate(full = N + Y) %>% 
+  filter(day(Week) == 1)
 
 # count number of fully licensed centers "not caring" per county per week
 child_care_centers %>% 
@@ -268,6 +271,7 @@ child_care_centers %>%
 
 # calculate ratio of children under 5 to total capacity of centers caring per week for each county
 # for graph 'Child care deserts in Texas counties'
+# for spreadsheet 'ratio_county'
 child_care_centers %>% 
   filter(Operating_Status == 'Y', Permit_Status == 'Full', NM_COUNTY != '') %>% 
   group_by(Week, NM_COUNTY) %>% 
@@ -308,6 +312,7 @@ child_care_centers %>%
   mutate(pct_change = (n - first(n)) / first(n) * 100)
 
 # count number of child care centers and homes providing care statewide per week
+# for spreadsheet 'center_home'
 child_care_centers %>% 
   filter(Permit_Status == 'Full') %>% 
   mutate(Type = case_when(grepl('Licensed Center', OP_TYPE) ~ 'Center',
@@ -317,18 +322,19 @@ child_care_centers %>%
   filter(Operating_Status == 'Y', year(Week) >= 2020) %>% 
   select(-Operating_Status) %>% 
   ungroup() %>% 
-  group_by(Type) %>% 
-  mutate(pct_change = (n - first(n)) / first(n) * 100)
+  pivot_wider(names_from = Type, values_from = n)
 
 # count seats in child care centers and homes providing care statewide per week
 # for graph 'Texas child care centers and homes'
+# for spreadsheet 'center_home'
 child_care_centers %>% 
   filter(Permit_Status == 'Full') %>% 
   mutate(Type = case_when(grepl('Licensed Center', OP_TYPE) ~ 'Center',
                           grepl('Home', OP_TYPE) ~ 'Home')) %>% 
   filter(Operating_Status == 'Y', year(Week) >= 2020) %>% 
   group_by(Type, Week) %>% 
-  summarize(capacity = sum(NBR_TOTAL_CPCTY, na.rm = T))
+  summarize(capacity = sum(NBR_TOTAL_CPCTY, na.rm = T)) %>% 
+  pivot_wider(names_from = Type, values_from = capacity)
 ```
 
 ```{r child_care_permits_analysis}
@@ -372,11 +378,14 @@ before_after_schools <- child_care_centers %>%
 
 # count number of fully licensed centers providing before/after school care statewide per week
 # for graph 'Texas before and after school programs hardest hit by pandemic'
+# for spreadsheet 'before_after_schools'
 before_after_schools %>% 
   group_by(Week) %>% 
   count(Operating_Status) %>% 
-  mutate(pct_caring = n / sum(n) * 100) %>% 
-  filter(Operating_Status == 'Y')
+  filter(Operating_Status == 'Y' | Operating_Status == 'N') %>% 
+  pivot_wider(names_from = Operating_Status, values_from = n) %>% 
+  mutate(full = N + Y) %>% 
+  filter(day(Week) == 1)
 
 # count number of programs "not caring" per county per week
 before_after_schools %>% 
