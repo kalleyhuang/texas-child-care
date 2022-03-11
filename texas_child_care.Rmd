@@ -459,26 +459,6 @@ child_care_centers %>%
   filter(Permit_Status == 'Full', Operating_Status == 'Y', Week == as.Date('2022-01-01')) %>% 
   filter(NM_COUNTY %in% child_care_deserts$COUNTY) # to find still open centers in deserts
 
-child_care_centers %>% 
-  filter(OP_TYPE %in% c('Licensed Child-Care Home', 'Listed Family Home', 'Registered Child-Care Home'), 
-         Permit_Status == 'Full') %>% 
-  count(Week) 
-
-child_care_centers %>% 
-  filter(Operating_Status == 'Y', Permit_Status == 'Full', NM_COUNTY != '', Week == as.Date('2020-01-01')) %>% 
-  group_by(NM_COUNTY) %>% 
-  summarize(NBR_TOTAL_CPCTY = sum(NBR_TOTAL_CPCTY, na.rm = T))
-
-child_care_centers %>% 
-  filter(Operating_Status == 'Y', Permit_Status == 'Full', NM_COUNTY != '', Week == as.Date('2020-05-01')) %>% 
-  group_by(NM_COUNTY) %>% 
-  summarize(NBR_TOTAL_CPCTY = sum(NBR_TOTAL_CPCTY, na.rm = T))
-
-child_care_centers %>% 
-  filter(Operating_Status == 'Y', Permit_Status == 'Full', NM_COUNTY != '', Week == as.Date('2022-01-01')) %>% 
-  group_by(NM_COUNTY) %>% 
-  summarize(NBR_TOTAL_CPCTY = sum(NBR_TOTAL_CPCTY, na.rm = T))
-
 children_by_county %>% 
   group_by(county) %>% 
   summarize(under_5 = under_3_years + X3_to_4_years + X5_years) %>% 
