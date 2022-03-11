@@ -55,7 +55,7 @@ child_care_operations_2021_12 <- child_care_centers_2021_12 %>%
          ADDR_LN1 = Address.Line.1, ADDR_LN2 = Address.Line.2, ADDR_CITY = City, ADDR_ZIP1 = Zip.Code,
          NM_COUNTY = County, OP_TYPE = Operation.Type, NBR_TOTAL_CPCTY = Capacity, 
          DT_LCNS_ISSUE = Permit.Issue.Date) %>% 
-  select(1:3, 4:12, contains('Operating.Status.')) %>% 
+  select(1:3, 5:12, contains('Operating.Status.')) %>% 
   pivot_longer(cols = starts_with('Operating.Status.'), names_to = 'Week', 
                names_prefix = 'Operating.Status.', values_to = 'Operating_Status') %>%
   mutate(DT_LCNS_ISSUE = mdy(DT_LCNS_ISSUE), Week = mdy(Week))
@@ -65,7 +65,7 @@ child_care_permits_2021_12 <- child_care_centers_2021_12 %>%
          ADDR_LN1 = Address.Line.1, ADDR_LN2 = Address.Line.2, ADDR_CITY = City, ADDR_ZIP1 = Zip.Code,
          NM_COUNTY = County, OP_TYPE = Operation.Type, NBR_TOTAL_CPCTY = Capacity, 
          DT_LCNS_ISSUE = Permit.Issue.Date) %>% 
-  select(1:3, 4:12, contains('Permit.Status.')) %>% 
+  select(1:3, 5:12, contains('Permit.Status.')) %>% 
   pivot_longer(cols = starts_with('Permit.Status.'), names_to = 'Week', 
                names_prefix = 'Permit.Status.', values_to = 'Permit_Status') %>% 
   mutate(DT_LCNS_ISSUE = mdy(DT_LCNS_ISSUE), Week = mdy(Week))
@@ -284,9 +284,27 @@ child_care_centers %>%
             NBR_TOTAL_CPCTY, ratio = under_5 / NBR_TOTAL_CPCTY) %>% 
   filter(Week == as.Date('2022-01-01')) %>% 
   merge(., child_care_centers %>% 
-          filter(NM_COUNTY != '', Week == as.Date('2022-01-01')) %>% 
+          filter(Operating_Status == 'Y', Permit_Status == 'Full', 
+                 NM_COUNTY != '', Week == as.Date('2022-01-01')) %>% 
           count(NM_COUNTY, OP_TYPE) %>% 
           pivot_wider(names_from = OP_TYPE, values_from = n))
+
+child_care_centers %>% 
+  filter(Operating_Status == 'Y', Permit_Status == 'Full', NM_COUNTY != '') %>% 
+  group_by(Week, NM_COUNTY) %>% 
+  summarize(NBR_TOTAL_CPCTY = sum(NBR_TOTAL_CPCTY, na.rm = T)) %>% 
+  merge(., children_by_county %>% 
+          filter(county != 'Texas') %>% 
+          mutate(county = toupper(county)) %>% 
+          rename(NM_COUNTY = county)) %>% 
+  summarize(Week, NM_COUNTY, under_5 = under_3_years + X3_to_4_years + X5_years, 
+            NBR_TOTAL_CPCTY, ratio = under_5 / NBR_TOTAL_CPCTY) %>%
+  mutate(category = case_when(ratio > 3 ~ 'desert', ratio <= 3 ~ 'not a desert')) %>% 
+  group_by(Week) %>% 
+  count(category) %>% 
+  filter(year(Week) >= 2020, day(Week) == 1) %>% 
+  pivot_wider(names_from = category, values_from = n) %>% 
+  mutate(none = 254 - desert - `not a desert`)
 
 child_care_centers %>% 
   filter(Operating_Status == 'Y', Permit_Status == 'Full') %>% 
@@ -329,8 +347,14 @@ child_care_centers %>%
 # for spreadsheet 'center_home'
 child_care_centers %>% 
   filter(Permit_Status == 'Full') %>% 
-  mutate(Type = case_when(grepl('Licensed Center', OP_TYPE) ~ 'Center',
-                          grepl('Home', OP_TYPE) ~ 'Home')) %>% 
+  mutate(Type = case_when(OP_TYPE %in% c('Licensed Center', 
+                                         'Licensed Center - Before/After School Program', 
+                                         'Licensed Center - Child Care Program', 
+                                         'Licensed Center - School Age Program', 
+                                         'Licensed Center - Temporary Shelter Program') ~ 'Center',
+                          OP_TYPE %in% c('Licensed Child-Care Home', 
+                                         'Listed Family Home', 
+                                         'Registered Child-Care Home') ~ 'Home')) %>% 
   filter(Operating_Status == 'Y', year(Week) >= 2020) %>% 
   group_by(Type, Week) %>% 
   summarize(capacity = sum(NBR_TOTAL_CPCTY, na.rm = T)) %>% 
@@ -436,8 +460,30 @@ child_care_centers %>%
   filter(NM_COUNTY %in% child_care_deserts$COUNTY) # to find still open centers in deserts
 
 child_care_centers %>% 
-  filter(OP_TYPE == 'Registered Child-Care Home', Permit_Status == 'Full') %>% 
+  filter(OP_TYPE %in% c('Licensed Child-Care Home', 'Listed Family Home', 'Registered Child-Care Home'), 
+         Permit_Status == 'Full') %>% 
   count(Week) 
+
+child_care_centers %>% 
+  filter(Operating_Status == 'Y', Permit_Status == 'Full', NM_COUNTY != '', Week == as.Date('2020-01-01')) %>% 
+  group_by(NM_COUNTY) %>% 
+  summarize(NBR_TOTAL_CPCTY = sum(NBR_TOTAL_CPCTY, na.rm = T))
+
+child_care_centers %>% 
+  filter(Operating_Status == 'Y', Permit_Status == 'Full', NM_COUNTY != '', Week == as.Date('2020-05-01')) %>% 
+  group_by(NM_COUNTY) %>% 
+  summarize(NBR_TOTAL_CPCTY = sum(NBR_TOTAL_CPCTY, na.rm = T))
+
+child_care_centers %>% 
+  filter(Operating_Status == 'Y', Permit_Status == 'Full', NM_COUNTY != '', Week == as.Date('2022-01-01')) %>% 
+  group_by(NM_COUNTY) %>% 
+  summarize(NBR_TOTAL_CPCTY = sum(NBR_TOTAL_CPCTY, na.rm = T))
+
+children_by_county %>% 
+  group_by(county) %>% 
+  summarize(under_5 = under_3_years + X3_to_4_years + X5_years) %>% 
+  filter(county %in% c('Briscoe', 'Cochran', 'Coke', 'Deaf Smith', 'Irion', 'Jeff Davis', 'Kenedy', 'King', 
+                       'Lipscomb', 'Loving', 'McMullen', 'Motley', 'Terrell', 'Throckmorton'))
 ```
 
 ```{r child_care_viz}
